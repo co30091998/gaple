@@ -1,0 +1,1519 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gaple Guest Room</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#111;color:#172027}
+button,input{font:inherit}button{border:0;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer}
+.wrap{max-width:1100px;margin:auto;padding:20px}.card{background:#fff;border:1px solid #d9d9d9;border-radius:18px;padding:22px;box-shadow:0 12px 35px #0005}
+.center{max-width:520px;margin:8vh auto}.field{margin:14px 0}.field label{display:block;color:#aac0c5;font-size:13px;margin-bottom:6px}.field input{width:100%;padding:12px;border-radius:9px;border:1px solid #395762;background:#fff;color:#172027}
+.primary{background:#f4c95d;color:#162019}.secondary{background:#294b59;color:#fff}.code{font-size:35px;letter-spacing:8px;font-weight:900;background:#f5f5f5;padding:15px;border-radius:12px;text-align:center;margin:15px 0}
+.hidden{display:none!important}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.game{display:grid;grid-template-columns:210px 1fr 210px;gap:14px}.player{min-height:140px}.active{outline:2px solid #f4c95d}.score{color:#aac0c5;font-size:13px;line-height:1.7}
+.board{min-height:420px;background:#176b3a;border:2px solid #222;border-radius:18px;padding:18px;display:flex;flex-direction:column;justify-content:center;box-shadow:none}.ends{display:flex;justify-content:space-between;font-size:13px}.chain{display:grid;grid-template-columns:repeat(7,minmax(48px,1fr));grid-auto-rows:82px;gap:6px;min-height:110px;height:280px;padding:15px;align-items:center;justify-items:center;overflow:auto}
+.tile{flex:0 0 48px;width:48px;height:82px;background:#fff;color:#c62828;border:2px solid #222;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:space-around;font-weight:900;box-shadow:0 3px 6px #0002}.half{height:50%;width:100%;display:grid;grid-template-columns:repeat(3,7px);grid-template-rows:repeat(3,7px);gap:2px;align-items:center;justify-content:center}.half:first-child{border-bottom:1px solid #aaa}.pip{width:5px;height:5px;background:#d71920;border-radius:50%;display:block}.pip.p1{grid-column:1;grid-row:1}.pip.p2{grid-column:2;grid-row:1}.pip.p3{grid-column:3;grid-row:1}.pip.p4{grid-column:1;grid-row:2}.pip.p5{grid-column:2;grid-row:2}.pip.p6{grid-column:3;grid-row:2}.pip.p7{grid-column:1;grid-row:3}.pip.p8{grid-column:2;grid-row:3}.pip.p9{grid-column:3;grid-row:3}.chain .tile.middle{width:82px;height:48px;flex-direction:row}.chain .tile.middle .half{height:100%;width:50%}.chain .tile.middle .half:first-child{border-bottom:0;border-right:1px solid #aaa}.stock{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;padding:8px;border:1px dashed #bbb;border-radius:10px}.stock-card{width:38px;height:62px;border:2px solid #222;border-radius:6px;background:#f3f3f3;display:flex;align-items:center;justify-content:center;font-weight:900;cursor:pointer}.stock-card:hover{transform:translateY(-3px);outline:2px solid #f4c95d}.pass-btn{margin-top:8px}.hand{display:flex;overflow:auto;gap:9px;padding:8px 2px 14px}.hand .tile{flex-basis:52px;width:52px;height:88px}.click{cursor:pointer}.click:hover{transform:translateY(-4px);outline:2px solid #f4c95d}.disabled{opacity:.4}.status{text-align:center;font-weight:700;margin:10px}.muted{color:#666}.modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;padding:20px}.modal .card{max-width:500px;text-align:center;width:100%}
+@media(max-width:850px){.game{grid-template-columns:1fr}.player{min-height:auto}.board{min-height:320px}}
+</style>
+
+<script>
+/* Ambil satu kartu cadangan. Fungsi ini sengaja menggunakan state.stock,
+   karena itulah nama tumpukan cadangan pada game. */
+function drawCard(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    if (!state || myIndex !== state.turn || !Array.isArray(state.stock) || !state.stock.length) {
+        return;
+    }
+
+    // Guest tidak mengubah state sendiri: minta Host yang mengubah state.
+    if (role !== 'host') {
+        send({ type: 'action', action: { kind: 'draw' } });
+        return;
+    }
+
+    apply({ kind: 'draw' }, false);
+}
+</script>
+
+</head>
+<body><div class="wrap">
+
+<section id="home" class="card center">
+<h1>🁣 Gaple Guest Room</h1>
+<p class="muted">Main berdua dari perangkat berbeda menggunakan kode room. Tidak perlu akun.</p>
+<div class="field"><label>Nama Anda</label><input id="name" value="Guest"></div>
+<button class="primary" onclick="createRoom()">Buat Room</button>
+<div style="text-align:center;margin:18px">atau</div>
+<div class="field"><label>Kode Room</label><input id="joinCode" placeholder="Contoh: AB7K2" maxlength="5" style="text-transform:uppercase"></div>
+<button class="secondary" onclick="joinRoom()">Gabung Room</button>
+<p id="homeMsg" class="muted"></p>
+</section>
+
+<section id="room" class="card center hidden">
+<h2>Room dibuat</h2><p>Bagikan kode ini kepada pemain kedua:</p><div id="roomCode" class="code"></div>
+<p id="roomStatus" class="muted">Menunggu pemain kedua...</p>
+<button class="secondary" onclick="leaveRoom()">Keluar Room</button>
+</section>
+
+<section id="game" class="hidden">
+<div class="top"><div><h1>🁣 GAPLE</h1><span id="roomLabel" class="muted"></span></div><button class="secondary" onclick="leaveRoom()">Keluar</button></div>
+<div class="game">
+<div id="p0" class="card player"></div>
+<main>
+<div class="board"><div class="ends"><span>Kiri: <b id="left">—</b></span><span>Kanan: <b id="right">—</b></span></div><div id="chain" class="chain"></div><div id="status" class="status"></div></div>
+<div class="card" style="margin-top:14px"><b id="turn"></b><div id="hand" class="hand"></div><div id="action" class="muted"></div></div>
+</main>
+<div id="p1" class="card player"></div>
+</div></section>
+
+<div id="modal" class="modal hidden"><div class="card"><h2 id="mTitle"></h2><div id="mBody"></div><button class="primary" onclick="closeModal()">Lanjut</button></div></div>
+</div>
+<script>
+/* =========================================================
+GAPLE INDONESIA - NETWORKING + GAME
+Versi PeerJS untuk GitHub Pages
+
+Cara kerja:
+Player 1:
+
+* Membuat room
+* Kode room menjadi Peer ID
+* Menunggu Player 2
+
+Player 2:
+
+* Memasukkan kode room
+* Terhubung ke Peer Player 1
+* Game dimulai
+
+Tidak menggunakan WebSocket Postman Echo.
+========================================================= */
+
+let peer = null;
+let dc = null;
+let role = null;
+let code = null;
+let state = null;
+let myIndex = null;
+let connected = false;
+let gameStarted = false;
+
+/* =========================================================
+LOAD PEERJS OTOMATIS
+Tidak perlu mengubah HTML
+========================================================= */
+
+function loadPeerJS() {
+return new Promise((resolve, reject) => {
+
+    if (typeof Peer !== 'undefined') {
+        resolve();
+        return;
+    }
+
+    const script = document.createElement('script');
+
+    script.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+
+    script.onload = () => {
+        if (typeof Peer !== 'undefined') {
+            resolve();
+        } else {
+            reject(new Error('PeerJS gagal dimuat.'));
+        }
+    };
+
+    script.onerror = () => {
+        reject(new Error('Tidak dapat memuat PeerJS.'));
+    };
+
+    document.head.appendChild(script);
+});
+
+}
+
+/* =========================================================
+UTILITAS
+========================================================= */
+
+const tiles = () => {
+let a = [];
+
+for (let i = 0; i <= 6; i++) {
+    for (let j = i; j <= 6; j++) {
+        a.push({
+            a: i,
+            b: j,
+            id: i + '-' + j
+        });
+    }
+}
+
+return a;
+
+};
+
+const shuffle = a => {
+a = [...a];
+
+for (let i = a.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+
+    [a[i], a[j]] = [a[j], a[i]];
+}
+
+return a;
+
+};
+
+/*
+Membuat kode room 5 karakter.
+*/
+function rnd() {
+
+const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+let result = '';
+
+for (let i = 0; i < 5; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
+}
+
+return result;
+
+}
+
+/*
+Menampilkan pesan di halaman awal.
+*/
+function msg(x) {
+const el = document.getElementById('homeMsg');
+
+if (el) {
+    el.textContent = x;
+}
+
+}
+
+/*
+Mengirim data ke lawan.
+*/
+function send(x) {
+
+if (!dc) {
+    console.warn('Data connection belum tersedia.');
+    return false;
+}
+
+if (dc.open === false) {
+    console.warn('Data connection belum terbuka.');
+    return false;
+}
+
+try {
+    dc.send(x);
+    return true;
+} catch (err) {
+    console.error('Gagal mengirim data:', err);
+    return false;
+}
+
+}
+
+/* =========================================================
+BUAT PEER
+========================================================= */
+
+function createPeer(peerId = null) {
+
+try {
+
+    if (peerId) {
+        peer = new Peer(peerId, {
+            debug: 1
+        });
+    } else {
+        peer = new Peer({
+            debug: 1
+        });
+    }
+
+} catch (err) {
+
+    console.error(err);
+
+    msg('Gagal membuat koneksi PeerJS.');
+
+    return;
+}
+
+
+/*
+   Peer berhasil terhubung ke PeerServer.
+*/
+peer.on('open', id => {
+
+    console.log('Peer berhasil terhubung:', id);
+
+    /*
+       HOST
+    */
+    if (role === 'host') {
+
+        code = id;
+
+        document.getElementById('roomCode').textContent = code;
+
+        document.getElementById('roomStatus').textContent =
+            'Menunggu pemain kedua...';
+
+        console.log('Room aktif:', code);
+    }
+
+
+    /*
+       GUEST
+    */
+    if (role === 'guest') {
+
+        document.getElementById('roomStatus').textContent =
+            'Menghubungkan ke room ' + code + '...';
+
+        connectToHost();
+    }
+});
+
+
+/*
+   HOST menerima koneksi dari Player 2.
+*/
+peer.on('connection', connection => {
+
+    console.log('Player 2 mencoba masuk:', connection.peer);
+
+    if (role !== 'host') {
+        return;
+    }
+
+    if (dc && dc.open) {
+        console.warn('Sudah ada pemain yang terhubung.');
+        connection.close();
+        return;
+    }
+
+    attachDC(connection);
+});
+
+
+/*
+   Error PeerJS.
+*/
+peer.on('error', err => {
+
+    console.error('PeerJS error:', err);
+
+    if (err.type === 'unavailable-id') {
+
+        if (role === 'host') {
+
+            /*
+               Kemungkinan kode room sedang dipakai.
+               Buat kode baru.
+            */
+
+            console.warn('Kode room sudah digunakan.');
+
+            if (peer) {
+                try {
+                    peer.destroy();
+                } catch (e) {}
+            }
+
+            setTimeout(() => {
+
+                code = rnd();
+
+                document.getElementById('roomCode').textContent = code;
+
+                createPeer(code);
+
+            }, 300);
+
+            return;
+        }
+    }
+
+
+    if (err.type === 'peer-unavailable') {
+
+        document.getElementById('roomStatus').textContent =
+            'Room tidak ditemukan atau sudah ditutup.';
+
+        return;
+    }
+
+
+    if (err.type === 'network') {
+
+        document.getElementById('roomStatus').textContent =
+            'Koneksi jaringan bermasalah.';
+
+        return;
+    }
+
+
+    document.getElementById('roomStatus').textContent =
+        'Koneksi gagal: ' + (err.message || err.type || 'Unknown error');
+});
+
+
+/*
+   Peer terputus.
+*/
+peer.on('disconnected', () => {
+
+    console.warn('PeerServer terputus.');
+
+    if (!connected) {
+
+        document.getElementById('roomStatus').textContent =
+            'Koneksi ke server terputus. Mencoba menghubungkan kembali...';
+
+        try {
+            peer.reconnect();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+});
+
+
+/*
+   Peer ditutup.
+*/
+peer.on('close', () => {
+
+    connected = false;
+
+    console.log('Peer ditutup.');
+});
+
+}
+
+/* =========================================================
+HUBUNGKAN PLAYER 2 KE PLAYER 1
+========================================================= */
+
+function connectToHost() {
+
+if (!peer) {
+    return;
+}
+
+if (!code) {
+    return;
+}
+
+console.log('Menghubungkan ke room:', code);
+
+try {
+
+    const connection = peer.connect(code, {
+        reliable: true,
+        serialization: 'json'
+    });
+
+    attachDC(connection);
+
+} catch (err) {
+
+    console.error('Gagal connect:', err);
+
+    document.getElementById('roomStatus').textContent =
+        'Gagal menghubungkan ke room.';
+}
+
+}
+
+/* =========================================================
+DATA CONNECTION
+========================================================= */
+
+function attachDC(connection) {
+
+if (!connection) {
+    return;
+}
+
+dc = connection;
+
+dc.on('open', () => {
+
+    console.log('DataChannel terbuka.');
+
+    connected = true;
+
+    document.getElementById('roomStatus').textContent =
+        'Pemain terhubung!';
+
+    /*
+       Pindahkan dari halaman room ke game.
+    */
+    document.getElementById('room').classList.add('hidden');
+    document.getElementById('game').classList.remove('hidden');
+
+
+    /*
+       Guest mengirim nama ke host.
+    */
+    if (role === 'guest') {
+
+        send({
+            type: 'hello',
+            name:
+                document.getElementById('name').value.trim() ||
+                'Guest'
+        });
+    }
+
+
+    /*
+       HOST memulai game setelah Player 2 benar-benar
+       terhubung.
+    */
+    if (role === 'host' && !gameStarted) {
+
+        startGame();
+    }
+});
+
+
+dc.on('data', data => {
+
+    try {
+
+        /*
+           PeerJS sudah bisa mengirim object JSON.
+           Tetapi tetap mendukung string agar aman.
+        */
+
+        let message = data;
+
+        if (typeof data === 'string') {
+            message = JSON.parse(data);
+        }
+
+        receive(message);
+
+    } catch (err) {
+
+        console.error('Data dari lawan tidak valid:', err);
+    }
+});
+
+
+dc.on('close', () => {
+
+    connected = false;
+
+    console.warn('Player lain terputus.');
+
+    document.getElementById('status').textContent =
+        'Pemain lain terputus dari permainan.';
+});
+
+
+dc.on('error', err => {
+
+    console.error('Data connection error:', err);
+
+    connected = false;
+
+    document.getElementById('roomStatus').textContent =
+        'Koneksi pemain bermasalah.';
+});
+
+}
+
+/* =========================================================
+BUAT ROOM
+========================================================= */
+
+async function createRoom() {
+
+try {
+
+    await loadPeerJS();
+
+} catch (err) {
+
+    msg('PeerJS gagal dimuat. Periksa koneksi internet.');
+
+    console.error(err);
+
+    return;
+}
+
+
+role = 'host';
+
+myIndex = 0;
+
+gameStarted = false;
+
+/*
+   Kode room dibuat sebagai Peer ID.
+*/
+code = rnd();
+
+document.getElementById('roomCode').textContent = code;
+
+document.getElementById('home').classList.add('hidden');
+
+document.getElementById('room').classList.remove('hidden');
+
+document.getElementById('roomStatus').textContent =
+    'Menghubungkan ke server...';
+
+
+/*
+   Peer ID = kode room.
+*/
+createPeer(code);
+
+}
+
+/* =========================================================
+GABUNG ROOM
+========================================================= */
+
+async function joinRoom() {
+
+const input =
+    (document.getElementById('joinCode').value || '')
+    .trim()
+    .toUpperCase();
+
+
+if (input.length !== 5) {
+
+    msg('Kode room harus 5 karakter.');
+
+    return;
+}
+
+
+try {
+
+    await loadPeerJS();
+
+} catch (err) {
+
+    msg('PeerJS gagal dimuat. Periksa koneksi internet.');
+
+    console.error(err);
+
+    return;
+}
+
+
+role = 'guest';
+
+myIndex = 1;
+
+code = input;
+
+gameStarted = false;
+
+document.getElementById('home').classList.add('hidden');
+
+document.getElementById('room').classList.remove('hidden');
+
+document.getElementById('roomCode').textContent = code;
+
+document.getElementById('roomStatus').textContent =
+    'Menghubungkan ke room ' + code + '...';
+
+
+/*
+   Guest mendapatkan Peer ID acak.
+*/
+createPeer();
+
+}
+
+/* =========================================================
+MEMULAI GAME
+========================================================= */
+
+function startGame() {
+
+if (gameStarted) {
+    return;
+}
+
+if (role !== 'host') {
+    return;
+}
+
+gameStarted = true;
+
+
+const deck = shuffle(tiles());
+
+
+state = {
+
+    players: [
+
+        {
+            name:
+                document.getElementById('name').value.trim() ||
+                'Guest',
+
+            hand: deck.slice(0, 7),
+
+            dead: [],
+
+            score: 0,
+
+            rounds: 0
+        },
+
+        {
+            name: 'Menunggu...',
+
+            hand: deck.slice(7, 14),
+
+            dead: [],
+
+            score: 0,
+
+            rounds: 0
+        }
+    ],
+
+    chain: [],
+
+    stock: deck.slice(14),
+
+    turn: 0,
+
+    starter: 0,
+
+    round: 1,
+
+    forcedDouble: false,
+
+    passCount: 0,
+
+    started: true
+};
+
+
+showGame();
+
+/*
+   Kirim state awal ke Player 2.
+*/
+send({
+    type: 'state',
+    state: state
+});
+
+}
+
+/* =========================================================
+TAMPILKAN GAME
+========================================================= */
+
+function showGame() {
+
+document.getElementById('room').classList.add('hidden');
+
+document.getElementById('game').classList.remove('hidden');
+
+render();
+
+}
+
+/* =========================================================
+TERIMA DATA DARI LAWAN
+========================================================= */
+
+function receive(m) {
+
+if (!m || !m.type) {
+    return;
+}
+
+
+/*
+   Player 2 mengirim nama.
+*/
+if (m.type === 'hello') {
+
+    if (role !== 'host') {
+        return;
+    }
+
+    if (!state) {
+        return;
+    }
+
+
+    state.players[1].name =
+        m.name || 'Guest';
+
+
+    /*
+       Host mengirim state terbaru
+       setelah nama Player 2 diterima.
+    */
+    send({
+        type: 'state',
+        state: state
+    });
+
+
+    render();
+
+    return;
+}
+
+
+/*
+   Sinkronisasi state.
+*/
+if (m.type === 'state') {
+
+    state = m.state;
+
+    if (!state) {
+        return;
+    }
+
+    gameStarted = true;
+
+    showGame();
+
+    return;
+}
+
+
+/*
+   Aksi pemain.
+*/
+if (m.type === 'action') {
+
+    if (!state) {
+        return;
+    }
+
+    apply(m.action, true);
+
+    return;
+}
+
+
+/*
+   Ping untuk menjaga koneksi.
+*/
+if (m.type === 'ping') {
+
+    send({
+        type: 'pong'
+    });
+
+    return;
+}
+
+}
+
+/* =========================================================
+CEK DOUBLE
+========================================================= */
+
+function hasDouble(p) {
+
+return p.hand.some(t => t.a === t.b);
+
+}
+
+/* =========================================================
+CEK KARTU BOLEH DIMAINKAN
+========================================================= */
+
+function can(t) {
+
+if (!state) {
+    return false;
+}
+
+
+/*
+   Meja kosong.
+*/
+if (!state.chain.length) {
+
+    return !state.forcedDouble ||
+           t.a === t.b;
+}
+
+
+const l = state.chain[0].a;
+
+const r =
+    state.chain[state.chain.length - 1].b;
+
+
+return (
+    t.a === l ||
+    t.b === l ||
+    t.a === r ||
+    t.b === r
+);
+
+}
+
+/* =========================================================
+MAIN KARTU
+========================================================= */
+
+function play(id) {
+
+if (!state) {
+    return;
+}
+
+if (myIndex !== state.turn) {
+    return;
+}
+
+
+const t =
+    state.players[myIndex]
+    .hand
+    .find(x => x.id === id);
+
+
+if (!t) {
+    return;
+}
+
+
+if (!can(t)) {
+    return;
+}
+
+
+apply(
+    {
+        kind: 'play',
+        id: id
+    },
+    false
+);
+
+}
+
+/* =========================================================
+BUANG KARTU
+========================================================= */
+
+function discard(id) {
+
+if (!state) {
+    return;
+}
+
+if (myIndex !== state.turn) {
+    return;
+}
+
+
+const p =
+    state.players[myIndex];
+
+
+/*
+   Tidak boleh discard jika masih ada kartu
+   yang bisa dimainkan.
+*/
+if (p.hand.some(can)) {
+    return;
+}
+
+
+apply(
+    {
+        kind: 'discard',
+        id: id
+    },
+    false
+);
+
+}
+
+/* =========================================================
+TERAPKAN AKSI
+========================================================= */
+
+function apply(a, remote) {
+
+if (!state || !a) return;
+const p = state.players[state.turn];
+if (!p) return;
+
+if (a.kind === 'draw') {
+    if (p.hand.some(can) || !state.stock.length) return;
+    p.hand.push(state.stock.shift());
+
+    if (p.hand.some(can)) {
+        state.passCount = 0;
+    } else if (!state.stock.length) {
+        state.turn = 1 - state.turn;
+        state.passCount = (state.passCount || 0) + 1;
+        if (state.passCount >= 2) { finish(state.turn); return; }
+    }
+
+    render();
+    if (role === 'host') send({ type: 'state', state: state });
+    else if (!remote) send({ type: 'action', action: a });
+    return;
+}
+
+if (a.kind === 'pass') {
+    if (p.hand.some(can) || state.stock.length) return;
+    state.passCount = (state.passCount || 0) + 1;
+    state.turn = 1 - state.turn;
+    if (state.passCount >= 2) { finish(state.turn); return; }
+    render();
+    if (role === 'host') send({ type: 'state', state: state });
+    else if (!remote) send({ type: 'action', action: a });
+    return;
+}
+
+if (a.kind === 'play') {
+    const t = p.hand.find(x => x.id === a.id);
+    if (!t || !can(t)) return;
+
+    if (!state.chain.length) state.chain = [t];
+    else {
+        const l = state.chain[0].a;
+        const r = state.chain[state.chain.length - 1].b;
+        if (t.b === l) state.chain.unshift(t);
+        else if (t.a === l) state.chain.unshift({a:t.b,b:t.a,id:t.id});
+        else if (t.a === r) state.chain.push(t);
+        else if (t.b === r) state.chain.push({a:t.b,b:t.a,id:t.id});
+        else return;
+    }
+
+    p.hand = p.hand.filter(x => x.id !== t.id);
+    state.forcedDouble = false;
+    state.passCount = 0;
+
+    if (!p.hand.length) { finish(state.turn); return; }
+    state.turn = 1 - state.turn;
+}
+
+render();
+if (role === 'host') send({ type: 'state', state: state });
+else if (!remote) send({ type: 'action', action: a });
+
+}
+
+/* =========================================================
+SELESAI RONDE
+========================================================= */
+
+function finish(w) {
+
+const scores =
+    state.players.map(p =>
+        p.hand
+            .concat(p.dead)
+            .reduce(
+                (s, t) => s + t.a + t.b,
+                0
+            )
+    );
+
+
+const winner =
+    scores[0] === scores[1]
+        ? tieWinner(0, 1)
+        : scores[0] < scores[1]
+            ? 0
+            : 1;
+
+
+state.players.forEach((p, i) => {
+
+    p.score = scores[i];
+});
+
+
+state.players[winner].rounds++;
+
+state.starter = winner;
+
+state.round++;
+
+
+document.getElementById('mTitle').textContent =
+    'Ronde selesai';
+
+
+document.getElementById('mBody').innerHTML =
+
+    '<h3>' +
+    state.players[winner].name +
+    ' menang!</h3>' +
+
+    '<p>' +
+    state.players[0].name +
+    ': ' +
+    scores[0] +
+    ' poin<br>' +
+
+    state.players[1].name +
+    ': ' +
+    scores[1] +
+    ' poin</p>';
+
+
+document.getElementById('modal')
+    .classList.remove('hidden');
+
+
+render();
+
+
+/*
+   Host mengirim hasil ronde.
+*/
+if (role === 'host') {
+
+    send({
+        type: 'state',
+        state: state
+    });
+}
+
+}
+
+/* =========================================================
+PENENTU PEMENANG JIKA SKOR SAMA
+========================================================= */
+
+function tieWinner(a, b) {
+
+const key = i =>
+
+    state.players[i]
+        .hand
+        .concat(state.players[i].dead)
+        .map(t => ({
+            s: t.a + t.b,
+            l: Math.min(t.a, t.b)
+        }))
+        .sort(
+            (x, y) =>
+                x.s - y.s ||
+                x.l - y.l
+        )[0] || {
+            s: 0,
+            l: 0
+        };
+
+
+const x = key(a);
+
+const y = key(b);
+
+
+return x.s !== y.s
+    ? (x.s < y.s ? a : b)
+    : (x.l <= y.l ? a : b);
+
+}
+
+/* =========================================================
+TUTUP MODAL DAN MULAI RONDE BARU
+========================================================= */
+
+function closeModal() {
+
+document.getElementById('modal')
+    .classList.add('hidden');
+
+
+/*
+   Hanya host yang membuat ronde baru.
+   Ini penting supaya kedua browser tidak
+   membuat deck berbeda.
+*/
+if (role !== 'host') {
+    return;
+}
+
+
+const deck = shuffle(tiles());
+
+
+state.players[0].hand =
+    deck.slice(0, 7);
+
+
+state.players[1].hand =
+    deck.slice(7, 14);
+
+
+state.players.forEach(p => {
+
+    p.dead = [];
+});
+
+
+state.chain = [];
+
+state.stock = deck.slice(14);
+
+state.passCount = 0;
+
+state.turn = state.starter;
+
+state.forcedDouble = true;
+
+
+/*
+   Jika starter tidak mempunyai double,
+   giliran pindah.
+*/
+if (!hasDouble(state.players[state.turn])) {
+
+    state.turn =
+        1 - state.turn;
+}
+
+
+render();
+
+
+/*
+   Kirim state ronde baru ke Player 2.
+*/
+send({
+    type: 'state',
+    state: state
+});
+
+}
+
+/* =========================================================
+RENDER KARTU
+========================================================= */
+
+function pipHalf(n) {
+    const pos = {1:[5],2:[1,9],3:[1,5,9],4:[1,3,7,9],5:[1,3,5,7,9],6:[1,3,4,6,7,9]};
+    return (pos[n] || []).map(i => '<span class="pip p' + i + '"></span>').join('');
+}
+
+function chainPosition(i) {
+    if (i < 7) return { col: i + 1, row: 1 };
+    if (i < 10) return { col: 7, row: i - 6 };
+    if (i < 17) return { col: 17 - i, row: 4 };
+    if (i < 20) return { col: 1, row: 20 - i };
+    if (i < 27) return { col: i - 19, row: 7 };
+    return { col: 7, row: 8 };
+}
+
+function tile(t, click, disabled, middle, pos) {
+    const place = pos ? ' style="grid-column:' + pos.col + ';grid-row:' + pos.row + '"' : '';
+    return '<div class="tile ' + (click ? 'click ' : '') + (disabled ? 'disabled ' : '') + (middle ? 'middle ' : '') + '"' + place + (click && !disabled ? ' onclick="play(\'' + t.id + '\')"' : '') + '>' + '<div class="half">' + pipHalf(t.a) + '</div><div class="half">' + pipHalf(t.b) + '</div></div>';
+}
+
+/* =========================================================
+RENDER GAME
+========================================================= */
+
+function render() {
+
+if (!state) {
+    return;
+}
+
+
+/*
+   Informasi pemain.
+*/
+state.players.forEach((p, i) => {
+
+    document.getElementById('p' + i).innerHTML =
+
+        '<h3>' +
+
+        p.name +
+
+        ' ' +
+
+        (
+            state.turn === i
+                ? '🟡'
+                : ''
+        ) +
+
+        '</h3>' +
+
+        '<div class="score">' +
+
+        'Kartu: <b>' +
+        p.hand.length +
+        '</b><br>' +
+
+        'Cadangan: <b>' +
+        (state.stock ? state.stock.length : 0) +
+        '</b><br>' +
+
+        'Menang ronde: <b>' +
+        p.rounds +
+        '</b><br>' +
+
+        'Poin ronde terakhir: <b>' +
+        p.score +
+        '</b>' +
+
+        '</div>';
+});
+
+
+/*
+   Meja.
+*/
+document.getElementById('chain').innerHTML = state.chain.length ? state.chain.map((t,i) => tile(t,false,false,i !== 0 && i !== state.chain.length-1,chainPosition(i))).join('') : '<span class="muted">Meja kosong</span>';
+
+
+/*
+   Nilai ujung kiri dan kanan.
+*/
+document.getElementById('left').textContent =
+
+    state.chain.length
+        ? state.chain[0].a
+        : '—';
+
+
+document.getElementById('right').textContent =
+
+    state.chain.length
+        ? state.chain[state.chain.length - 1].b
+        : '—';
+
+
+/*
+   Kartu milik sendiri.
+*/
+const p =
+    state.players[myIndex];
+
+
+if (!p) {
+    return;
+}
+
+
+const playable =
+    p.hand.filter(can);
+
+
+const mine =
+    state.turn === myIndex;
+
+
+document.getElementById('turn').textContent =
+
+    mine
+
+        ? 'Giliran Anda — ' + p.name
+
+        : 'Giliran ' +
+          state.players[state.turn].name;
+
+
+document.getElementById('status').textContent =
+
+    mine
+
+        ? (
+            playable.length
+                ? 'Pilih kartu yang cocok.'
+                : 'Tidak ada yang cocok: pilih kartu untuk dibuang.'
+          )
+
+        : 'Menunggu giliran lawan...';
+
+
+/* Kartu tangan sendiri. */
+if (mine) {
+    document.getElementById('hand').innerHTML = p.hand.map(t => {
+        const isPlayable = playable.some(x => x.id === t.id);
+        return tile(t, true, !isPlayable);
+    }).join('');
+} else {
+    document.getElementById('hand').innerHTML = p.hand.map(t => tile(t,false,false)).join('');
+}
+
+const oldStock = document.getElementById('stockArea');
+if (oldStock) oldStock.remove();
+
+if (mine && !playable.length) {
+    const area = document.createElement('div');
+    area.id = 'stockArea';
+    area.className = 'stock';
+    if (state.stock.length) {
+        area.innerHTML = state.stock.map(() => '<div class="stock-card" onclick="drawCard()">🁣</div>').join('');
+        document.getElementById('action').textContent = 'Tidak ada kartu yang cocok. Pilih 1 kartu cadangan. Jika belum cocok, pilih lagi.';
+    } else {
+        area.innerHTML = '<span class="muted">Tidak ada kartu cadangan.</span>';
+        document.getElementById('action').textContent = 'Tidak ada kartu yang cocok dan cadangan habis. Anda harus Lewat.';
+        const btn = document.createElement('button');
+        btn.className = 'secondary pass-btn';
+        btn.textContent = 'Lewat';
+        btn.onclick = () => apply({kind:'pass'}, false);
+        area.appendChild(btn);
+    }
+    document.getElementById('hand').parentElement.appendChild(area);
+} else {
+    document.getElementById('action').textContent = mine ? 'Pilih kartu yang cocok.' : 'Menunggu giliran lawan...';
+}
+
+document.getElementById('roomLabel').textContent =
+    'Room: ' + code;
+
+}
+
+/* =========================================================
+KELUAR ROOM
+========================================================= */
+
+function leaveRoom() {
+
+connected = false;
+
+gameStarted = false;
+
+
+try {
+
+    if (dc) {
+        dc.close();
+    }
+
+} catch (e) {}
+
+
+try {
+
+    if (peer) {
+        peer.destroy();
+    }
+
+} catch (e) {}
+
+
+/*
+   Kembali ke halaman awal.
+*/
+location.reload();
+
+}
+
+/* =========================================================
+DIAGNOSTIK
+========================================================= */
+
+console.log(
+'%cGAPLE siap. Networking menggunakan PeerJS.',
+'color:#f4c95d;font-weight:bold;'
+);
+
+</script>
+</body></html>
+
+<style>
+html,body { background:#111 !important; color:#e7ecef !important; }
+body { min-height:100vh; }
+
+/* Semua box di sisi kiri, kanan, dan bawah area game dibuat gelap. */
+.card, .player, #p0, #p1, #hand, #action {
+  background:#181818 !important;
+  color:#e7ecef !important;
+  border-color:#333 !important;
+}
+.card h1,.card h2,.card h3,.card b { color:#f2f2f2; }
+.muted,.score { color:#aeb8bc !important; }
+.field input { background:#242424 !important; color:#fff !important; border-color:#45545a !important; }
+
+/* Meja biliar: felt hijau + rail/pinggiran. */
+.board {
+  background:radial-gradient(ellipse at center,#1b7a43 0%,#126637 58%,#0b4a28 100%) !important;
+  border:18px solid #5a351d !important;
+  border-radius:28px !important;
+  box-shadow:inset 0 0 0 4px #2c180d, inset 0 0 0 7px #8a5a32,
+             inset 0 0 32px rgba(0,0,0,.55), 0 12px 28px rgba(0,0,0,.55) !important;
+}
+.board::before {
+  content:""; position:absolute; inset:5px; border:2px solid rgba(220,180,115,.65);
+  border-radius:16px; pointer-events:none;
+}
+
+/* Stack cadangan benar-benar merupakan tombol yang dapat diklik. */
+.stock {
+  background:#202020 !important; border:1px solid #444 !important;
+  border-radius:12px; padding:10px; position:relative; z-index:20;
+}
+.stock-card {
+  position:relative; z-index:21; pointer-events:auto !important;
+  width:48px !important; height:68px !important;
+  background:linear-gradient(135deg,#294b59,#162b34) !important;
+  color:#fff !important; border:2px solid #c9a66b !important;
+  border-radius:7px; cursor:pointer !important;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 3px 8px rgba(0,0,0,.45);
+  transition:transform .12s, box-shadow .12s;
+}
+.stock-card:hover { transform:translateY(-4px); box-shadow:0 7px 12px rgba(0,0,0,.5); outline:2px solid #f4c95d; }
+.stock-card:active { transform:translateY(-1px); }
+
+/* Susunan rantai: ujung tegak, kartu tengah mendatar.
+   Setiap kartu yang dibalik saat masuk rantai tetap membawa nilai a/b yang sesuai,
+   sehingga pip kiri/kanan selalu mengikuti angka ujung rantai. */
+.chain {
+  position:relative; grid-template-columns:repeat(7,minmax(48px,1fr));
+  grid-template-rows:repeat(4,70px); grid-auto-rows:70px;
+  gap:6px; min-height:300px; height:300px; overflow:hidden !important;
+  align-items:center; justify-items:center;
+}
+.chain .tile.middle {
+  width:82px !important; height:48px !important;
+  flex-direction:row !important;
+}
+.chain .tile.middle .half { height:100% !important; width:50% !important; }
+.chain .tile.middle .half:first-child { border-bottom:0 !important; border-right:1px solid #aaa !important; }
+.chain > .tile:not(.middle) { width:48px; height:82px; }
+
+/* Pastikan kartu pemain tetap tegak. */
+.hand .tile { width:52px !important; height:88px !important; flex-direction:column !important; }
+
+/* Pip domino merah tetap jelas pada latar kartu putih. */
+.tile { background:#fff !important; color:#c62828 !important; }
+
+@media(max-width:850px){
+  .game { grid-template-columns:1fr; }
+  .board { min-height:320px; }
+}
+</style>
