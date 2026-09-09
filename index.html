@@ -47,1591 +47,604 @@ button,input{font:inherit}button{border:0;border-radius:10px;padding:11px 16px;f
 <div id="modal" class="modal hidden"><div class="card"><h2 id="mTitle"></h2><div id="mBody"></div><button class="primary" onclick="closeModal()">Lanjut</button></div></div>
 </div>
 <script>
-/* =========================================================
-GAPLE INDONESIA - NETWORKING + GAME
-Versi PeerJS untuk GitHub Pages
+// ===============================
+// KONFIGURASI
+// ===============================
 
-Cara kerja:
-Player 1:
-
-* Membuat room
-* Kode room menjadi Peer ID
-* Menunggu Player 2
-
-Player 2:
-
-* Memasukkan kode room
-* Terhubung ke Peer Player 1
-* Game dimulai
-
-Tidak menggunakan WebSocket Postman Echo.
-========================================================= */
+const PEERJS_URL =
+  "https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js";
 
 let peer = null;
 let dc = null;
-let role = null;
-let code = null;
-let state = null;
-let myIndex = null;
-let connected = false;
-let gameStarted = false;
 
-/* =========================================================
-LOAD PEERJS OTOMATIS
-Tidak perlu mengubah HTML
-========================================================= */
+let role = null;        // "host" atau "guest"
+let code = "";
+let state = null;
+let myIndex = 0;
+let connected = false;
+
+
+// ===============================
+// LOAD PEERJS
+// ===============================
 
 function loadPeerJS() {
-return new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
 
-```
-    if (typeof Peer !== 'undefined') {
-        resolve();
-        return;
-    }
-
-    const script = document.createElement('script');
-
-    script.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
-
-    script.onload = () => {
-        if (typeof Peer !== 'undefined') {
+        if (window.Peer) {
             resolve();
-        } else {
-            reject(new Error('PeerJS gagal dimuat.'));
-        }
-    };
-
-    script.onerror = () => {
-        reject(new Error('Tidak dapat memuat PeerJS.'));
-    };
-
-    document.head.appendChild(script);
-});
-```
-
-}
-
-/* =========================================================
-UTILITAS
-========================================================= */
-
-const tiles = () => {
-let a = [];
-
-```
-for (let i = 0; i <= 6; i++) {
-    for (let j = i; j <= 6; j++) {
-        a.push({
-            a: i,
-            b: j,
-            id: i + '-' + j
-        });
-    }
-}
-
-return a;
-```
-
-};
-
-const shuffle = a => {
-a = [...a];
-
-```
-for (let i = a.length - 1; i > 0; i--) {
-    let j = Math.floor(Math.random() * (i + 1));
-
-    [a[i], a[j]] = [a[j], a[i]];
-}
-
-return a;
-```
-
-};
-
-/*
-Membuat kode room 5 karakter.
-*/
-function rnd() {
-
-```
-const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-let result = '';
-
-for (let i = 0; i < 5; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
-}
-
-return result;
-```
-
-}
-
-/*
-Menampilkan pesan di halaman awal.
-*/
-function msg(x) {
-const el = document.getElementById('homeMsg');
-
-```
-if (el) {
-    el.textContent = x;
-}
-```
-
-}
-
-/*
-Mengirim data ke lawan.
-*/
-function send(x) {
-
-```
-if (!dc) {
-    console.warn('Data connection belum tersedia.');
-    return false;
-}
-
-if (dc.open === false) {
-    console.warn('Data connection belum terbuka.');
-    return false;
-}
-
-try {
-    dc.send(x);
-    return true;
-} catch (err) {
-    console.error('Gagal mengirim data:', err);
-    return false;
-}
-```
-
-}
-
-/* =========================================================
-BUAT PEER
-========================================================= */
-
-function createPeer(peerId = null) {
-
-```
-try {
-
-    if (peerId) {
-        peer = new Peer(peerId, {
-            debug: 1
-        });
-    } else {
-        peer = new Peer({
-            debug: 1
-        });
-    }
-
-} catch (err) {
-
-    console.error(err);
-
-    msg('Gagal membuat koneksi PeerJS.');
-
-    return;
-}
-
-
-/*
-   Peer berhasil terhubung ke PeerServer.
-*/
-peer.on('open', id => {
-
-    console.log('Peer berhasil terhubung:', id);
-
-    /*
-       HOST
-    */
-    if (role === 'host') {
-
-        code = id;
-
-        document.getElementById('roomCode').textContent = code;
-
-        document.getElementById('roomStatus').textContent =
-            'Menunggu pemain kedua...';
-
-        console.log('Room aktif:', code);
-    }
-
-
-    /*
-       GUEST
-    */
-    if (role === 'guest') {
-
-        document.getElementById('roomStatus').textContent =
-            'Menghubungkan ke room ' + code + '...';
-
-        connectToHost();
-    }
-});
-
-
-/*
-   HOST menerima koneksi dari Player 2.
-*/
-peer.on('connection', connection => {
-
-    console.log('Player 2 mencoba masuk:', connection.peer);
-
-    if (role !== 'host') {
-        return;
-    }
-
-    if (dc && dc.open) {
-        console.warn('Sudah ada pemain yang terhubung.');
-        connection.close();
-        return;
-    }
-
-    attachDC(connection);
-});
-
-
-/*
-   Error PeerJS.
-*/
-peer.on('error', err => {
-
-    console.error('PeerJS error:', err);
-
-    if (err.type === 'unavailable-id') {
-
-        if (role === 'host') {
-
-            /*
-               Kemungkinan kode room sedang dipakai.
-               Buat kode baru.
-            */
-
-            console.warn('Kode room sudah digunakan.');
-
-            if (peer) {
-                try {
-                    peer.destroy();
-                } catch (e) {}
-            }
-
-            setTimeout(() => {
-
-                code = rnd();
-
-                document.getElementById('roomCode').textContent = code;
-
-                createPeer(code);
-
-            }, 300);
-
             return;
         }
-    }
+
+        const script = document.createElement("script");
+
+        script.src = PEERJS_URL;
+
+        script.onload = () => {
+            if (window.Peer) {
+                resolve();
+            } else {
+                reject(new Error("PeerJS gagal dimuat."));
+            }
+        };
+
+        script.onerror = () => {
+            reject(new Error("Tidak dapat memuat PeerJS."));
+        };
+
+        document.head.appendChild(script);
+    });
+}
 
 
-    if (err.type === 'peer-unavailable') {
+// ===============================
+// BUAT PEER
+// ===============================
 
-        document.getElementById('roomStatus').textContent =
-            'Room tidak ditemukan atau sudah ditutup.';
+function createPeer(id = null) {
 
-        return;
-    }
-
-
-    if (err.type === 'network') {
-
-        document.getElementById('roomStatus').textContent =
-            'Koneksi jaringan bermasalah.';
-
-        return;
-    }
-
-
-    document.getElementById('roomStatus').textContent =
-        'Koneksi gagal: ' + (err.message || err.type || 'Unknown error');
-});
-
-
-/*
-   Peer terputus.
-*/
-peer.on('disconnected', () => {
-
-    console.warn('PeerServer terputus.');
-
-    if (!connected) {
-
-        document.getElementById('roomStatus').textContent =
-            'Koneksi ke server terputus. Mencoba menghubungkan kembali...';
+    return new Promise((resolve, reject) => {
 
         try {
-            peer.reconnect();
-        } catch (e) {
-            console.error(e);
+
+            if (id) {
+                peer = new Peer(id, {
+                    debug: 1
+                });
+            } else {
+                peer = new Peer({
+                    debug: 1
+                });
+            }
+
+            peer.on("open", peerId => {
+
+                console.log("Peer berhasil dibuat:", peerId);
+
+                resolve(peerId);
+            });
+
+            peer.on("error", err => {
+
+                console.error("PeerJS Error:", err);
+
+                reject(err);
+            });
+
+            peer.on("disconnected", () => {
+
+                console.log("Peer terputus dari server signaling.");
+            });
+
+        } catch (err) {
+
+            reject(err);
         }
-    }
-});
-
-
-/*
-   Peer ditutup.
-*/
-peer.on('close', () => {
-
-    connected = false;
-
-    console.log('Peer ditutup.');
-});
-```
-
-}
-
-/* =========================================================
-HUBUNGKAN PLAYER 2 KE PLAYER 1
-========================================================= */
-
-function connectToHost() {
-
-```
-if (!peer) {
-    return;
-}
-
-if (!code) {
-    return;
-}
-
-console.log('Menghubungkan ke room:', code);
-
-try {
-
-    const connection = peer.connect(code, {
-        reliable: true,
-        serialization: 'json'
     });
-
-    attachDC(connection);
-
-} catch (err) {
-
-    console.error('Gagal connect:', err);
-
-    document.getElementById('roomStatus').textContent =
-        'Gagal menghubungkan ke room.';
-}
-```
-
 }
 
-/* =========================================================
-DATA CONNECTION
-========================================================= */
 
-function attachDC(connection) {
-
-```
-if (!connection) {
-    return;
-}
-
-dc = connection;
-
-dc.on('open', () => {
-
-    console.log('DataChannel terbuka.');
-
-    connected = true;
-
-    document.getElementById('roomStatus').textContent =
-        'Pemain terhubung!';
-
-    /*
-       Pindahkan dari halaman room ke game.
-    */
-    document.getElementById('room').classList.add('hidden');
-    document.getElementById('game').classList.remove('hidden');
-
-
-    /*
-       Guest mengirim nama ke host.
-    */
-    if (role === 'guest') {
-
-        send({
-            type: 'hello',
-            name:
-                document.getElementById('name').value.trim() ||
-                'Guest'
-        });
-    }
-
-
-    /*
-       HOST memulai game setelah Player 2 benar-benar
-       terhubung.
-    */
-    if (role === 'host' && !gameStarted) {
-
-        startGame();
-    }
-});
-
-
-dc.on('data', data => {
-
-    try {
-
-        /*
-           PeerJS sudah bisa mengirim object JSON.
-           Tetapi tetap mendukung string agar aman.
-        */
-
-        let message = data;
-
-        if (typeof data === 'string') {
-            message = JSON.parse(data);
-        }
-
-        receive(message);
-
-    } catch (err) {
-
-        console.error('Data dari lawan tidak valid:', err);
-    }
-});
-
-
-dc.on('close', () => {
-
-    connected = false;
-
-    console.warn('Player lain terputus.');
-
-    document.getElementById('status').textContent =
-        'Pemain lain terputus dari permainan.';
-});
-
-
-dc.on('error', err => {
-
-    console.error('Data connection error:', err);
-
-    connected = false;
-
-    document.getElementById('roomStatus').textContent =
-        'Koneksi pemain bermasalah.';
-});
-```
-
-}
-
-/* =========================================================
-BUAT ROOM
-========================================================= */
+// ===============================
+// BUAT ROOM
+// ===============================
 
 async function createRoom() {
 
-```
-try {
+    try {
 
-    await loadPeerJS();
+        role = "host";
+        myIndex = 0;
 
-} catch (err) {
+        // Buat kode room
+        code = generateRoomCode();
 
-    msg('PeerJS gagal dimuat. Periksa koneksi internet.');
+        await loadPeerJS();
 
-    console.error(err);
+        // Gunakan kode room sebagai Peer ID host
+        await createPeer(code);
 
-    return;
+        // Host menunggu pemain kedua
+        peer.on("connection", connection => {
+
+            console.log("Pemain kedua mencoba masuk.");
+
+            dc = connection;
+
+            attachDataConnection(dc);
+
+        });
+
+        showWaitingRoom();
+
+    } catch (err) {
+
+        console.error(err);
+
+        alert(
+            "Gagal membuat room.\n\n" +
+            (err.message || err)
+        );
+    }
 }
 
 
-role = 'host';
-
-myIndex = 0;
-
-gameStarted = false;
-
-/*
-   Kode room dibuat sebagai Peer ID.
-*/
-code = rnd();
-
-document.getElementById('roomCode').textContent = code;
-
-document.getElementById('home').classList.add('hidden');
-
-document.getElementById('room').classList.remove('hidden');
-
-document.getElementById('roomStatus').textContent =
-    'Menghubungkan ke server...';
-
-
-/*
-   Peer ID = kode room.
-*/
-createPeer(code);
-```
-
-}
-
-/* =========================================================
-GABUNG ROOM
-========================================================= */
+// ===============================
+// GABUNG ROOM
+// ===============================
 
 async function joinRoom() {
 
-```
-const input =
-    (document.getElementById('joinCode').value || '')
-    .trim()
-    .toUpperCase();
+    try {
 
+        const input = prompt("Masukkan kode room:");
 
-if (input.length !== 5) {
-
-    msg('Kode room harus 5 karakter.');
-
-    return;
-}
-
-
-try {
-
-    await loadPeerJS();
-
-} catch (err) {
-
-    msg('PeerJS gagal dimuat. Periksa koneksi internet.');
-
-    console.error(err);
-
-    return;
-}
-
-
-role = 'guest';
-
-myIndex = 1;
-
-code = input;
-
-gameStarted = false;
-
-document.getElementById('home').classList.add('hidden');
-
-document.getElementById('room').classList.remove('hidden');
-
-document.getElementById('roomCode').textContent = code;
-
-document.getElementById('roomStatus').textContent =
-    'Menghubungkan ke room ' + code + '...';
-
-
-/*
-   Guest mendapatkan Peer ID acak.
-*/
-createPeer();
-```
-
-}
-
-/* =========================================================
-MEMULAI GAME
-========================================================= */
-
-function startGame() {
-
-```
-if (gameStarted) {
-    return;
-}
-
-if (role !== 'host') {
-    return;
-}
-
-gameStarted = true;
-
-
-const deck = shuffle(tiles());
-
-
-state = {
-
-    players: [
-
-        {
-            name:
-                document.getElementById('name').value.trim() ||
-                'Guest',
-
-            hand: deck.slice(0, 14),
-
-            dead: [],
-
-            score: 0,
-
-            rounds: 0
-        },
-
-        {
-            name: 'Menunggu...',
-
-            hand: deck.slice(14),
-
-            dead: [],
-
-            score: 0,
-
-            rounds: 0
-        }
-    ],
-
-    chain: [],
-
-    turn: 0,
-
-    starter: 0,
-
-    round: 1,
-
-    forcedDouble: false,
-
-    started: true
-};
-
-
-showGame();
-
-/*
-   Kirim state awal ke Player 2.
-*/
-send({
-    type: 'state',
-    state: state
-});
-```
-
-}
-
-/* =========================================================
-TAMPILKAN GAME
-========================================================= */
-
-function showGame() {
-
-```
-document.getElementById('room').classList.add('hidden');
-
-document.getElementById('game').classList.remove('hidden');
-
-render();
-```
-
-}
-
-/* =========================================================
-TERIMA DATA DARI LAWAN
-========================================================= */
-
-function receive(m) {
-
-```
-if (!m || !m.type) {
-    return;
-}
-
-
-/*
-   Player 2 mengirim nama.
-*/
-if (m.type === 'hello') {
-
-    if (role !== 'host') {
-        return;
-    }
-
-    if (!state) {
-        return;
-    }
-
-
-    state.players[1].name =
-        m.name || 'Guest';
-
-
-    /*
-       Host mengirim state terbaru
-       setelah nama Player 2 diterima.
-    */
-    send({
-        type: 'state',
-        state: state
-    });
-
-
-    render();
-
-    return;
-}
-
-
-/*
-   Sinkronisasi state.
-*/
-if (m.type === 'state') {
-
-    state = m.state;
-
-    if (!state) {
-        return;
-    }
-
-    gameStarted = true;
-
-    showGame();
-
-    return;
-}
-
-
-/*
-   Aksi pemain.
-*/
-if (m.type === 'action') {
-
-    if (!state) {
-        return;
-    }
-
-    apply(m.action, true);
-
-    return;
-}
-
-
-/*
-   Ping untuk menjaga koneksi.
-*/
-if (m.type === 'ping') {
-
-    send({
-        type: 'pong'
-    });
-
-    return;
-}
-```
-
-}
-
-/* =========================================================
-CEK DOUBLE
-========================================================= */
-
-function hasDouble(p) {
-
-```
-return p.hand.some(t => t.a === t.b);
-```
-
-}
-
-/* =========================================================
-CEK KARTU BOLEH DIMAINKAN
-========================================================= */
-
-function can(t) {
-
-```
-if (!state) {
-    return false;
-}
-
-
-/*
-   Meja kosong.
-*/
-if (!state.chain.length) {
-
-    return !state.forcedDouble ||
-           t.a === t.b;
-}
-
-
-const l = state.chain[0].a;
-
-const r =
-    state.chain[state.chain.length - 1].b;
-
-
-return (
-    t.a === l ||
-    t.b === l ||
-    t.a === r ||
-    t.b === r
-);
-```
-
-}
-
-/* =========================================================
-MAIN KARTU
-========================================================= */
-
-function play(id) {
-
-```
-if (!state) {
-    return;
-}
-
-if (myIndex !== state.turn) {
-    return;
-}
-
-
-const t =
-    state.players[myIndex]
-    .hand
-    .find(x => x.id === id);
-
-
-if (!t) {
-    return;
-}
-
-
-if (!can(t)) {
-    return;
-}
-
-
-apply(
-    {
-        kind: 'play',
-        id: id
-    },
-    false
-);
-```
-
-}
-
-/* =========================================================
-BUANG KARTU
-========================================================= */
-
-function discard(id) {
-
-```
-if (!state) {
-    return;
-}
-
-if (myIndex !== state.turn) {
-    return;
-}
-
-
-const p =
-    state.players[myIndex];
-
-
-/*
-   Tidak boleh discard jika masih ada kartu
-   yang bisa dimainkan.
-*/
-if (p.hand.some(can)) {
-    return;
-}
-
-
-apply(
-    {
-        kind: 'discard',
-        id: id
-    },
-    false
-);
-```
-
-}
-
-/* =========================================================
-TERAPKAN AKSI
-========================================================= */
-
-function apply(a, remote) {
-
-```
-if (!state || !a) {
-    return;
-}
-
-
-const p =
-    state.players[state.turn];
-
-
-if (!p) {
-    return;
-}
-
-
-/* -----------------------------------------------------
-   MAIN KARTU
-   ----------------------------------------------------- */
-
-if (a.kind === 'play') {
-
-    const t =
-        p.hand.find(x => x.id === a.id);
-
-
-    if (!t) {
-        return;
-    }
-
-
-    if (!can(t)) {
-        return;
-    }
-
-
-    /*
-       Jika meja kosong.
-    */
-    if (!state.chain.length) {
-
-        state.chain = [t];
-
-    } else {
-
-        const l =
-            state.chain[0].a;
-
-        const r =
-            state.chain[state.chain.length - 1].b;
-
-
-        /*
-           Cocok dengan sisi kiri.
-        */
-        if (t.b === l) {
-
-            state.chain.unshift(t);
-
-        } else if (t.a === l) {
-
-            /*
-               Balik kartu supaya sisi yang cocok
-               menghadap kiri.
-            */
-            const flipped = {
-                a: t.b,
-                b: t.a,
-                id: t.id
-            };
-
-            state.chain.unshift(flipped);
-
+        if (!input) {
+            return;
         }
 
+        code = input.trim().toUpperCase();
 
-        /*
-           Cocok dengan sisi kanan.
-        */
-        else if (t.a === r) {
+        if (code.length !== 5) {
 
-            state.chain.push(t);
-
-        } else if (t.b === r) {
-
-            const flipped = {
-                a: t.b,
-                b: t.a,
-                id: t.id
-            };
-
-            state.chain.push(flipped);
-
-        } else {
+            alert("Kode room harus terdiri dari 5 karakter.");
 
             return;
         }
+
+        role = "guest";
+        myIndex = 1;
+
+        await loadPeerJS();
+
+        // Guest menggunakan Peer ID acak
+        await createPeer();
+
+        console.log("Menghubungkan ke host:", code);
+
+        dc = peer.connect(code, {
+            reliable: true
+        });
+
+        attachDataConnection(dc);
+
+    } catch (err) {
+
+        console.error(err);
+
+        alert(
+            "Gagal bergabung ke room.\n\n" +
+            (err.message || err)
+        );
     }
-
-
-    /*
-       Hapus kartu dari tangan.
-    */
-    p.hand =
-        p.hand.filter(x => x.id !== t.id);
-
-
-    state.forcedDouble = false;
 }
 
 
-/* -----------------------------------------------------
-   DISCARD
-   ----------------------------------------------------- */
+// ===============================
+// DATA CONNECTION
+// ===============================
 
-else if (a.kind === 'discard') {
+function attachDataConnection(connection) {
 
-    const t =
-        p.hand.find(x => x.id === a.id);
+    dc = connection;
 
+    connection.on("open", () => {
 
-    if (!t) {
-        return;
-    }
+        console.log("DataConnection terbuka.");
 
+        connected = true;
 
-    /*
-       Pastikan memang tidak ada kartu yang
-       bisa dimainkan.
-    */
-    if (p.hand.some(can)) {
-        return;
-    }
+        if (role === "host") {
 
+            // Host membuat game
+            startGame();
 
-    p.hand =
-        p.hand.filter(x => x.id !== t.id);
+        } else {
 
-    p.dead.push(t);
-}
+            // Beritahu host bahwa guest sudah masuk
+            send({
+                type: "guest-ready"
+            });
+        }
 
+    });
 
-/* -----------------------------------------------------
-   CEK PEMENANG
-   ----------------------------------------------------- */
+    connection.on("data", data => {
 
-if (!p.hand.length) {
+        console.log("Data diterima:", data);
 
-    finish(state.turn);
+        receive(data);
 
-    return;
-}
+    });
 
+    connection.on("close", () => {
 
-/*
-   Pindah giliran.
-*/
-state.turn = 1 - state.turn;
+        console.log("Koneksi ditutup.");
 
+        connected = false;
 
-render();
+        alert("Pemain kedua telah keluar dari permainan.");
+    });
 
+    connection.on("error", err => {
 
-/*
-   Jika aksi berasal dari pemain lokal,
-   kirim ke pemain lain.
-*/
-if (!remote) {
+        console.error("DataConnection Error:", err);
 
-    send({
-        type: 'action',
-        action: a
+        connected = false;
     });
 }
-```
 
+
+// ===============================
+// KIRIM DATA
+// ===============================
+
+function send(data) {
+
+    if (!dc) {
+        console.warn("DataConnection belum tersedia.");
+        return;
+    }
+
+    if (!dc.open) {
+        console.warn("DataConnection belum terbuka.");
+        return;
+    }
+
+    dc.send(data);
 }
 
-/* =========================================================
-SELESAI RONDE
-========================================================= */
 
-function finish(w) {
+// ===============================
+// GENERATE KODE ROOM
+// ===============================
 
-```
-const scores =
-    state.players.map(p =>
-        p.hand
-            .concat(p.dead)
-            .reduce(
-                (s, t) => s + t.a + t.b,
-                0
-            )
+function generateRoomCode() {
+
+    const chars =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+    let result = "";
+
+    for (let i = 0; i < 5; i++) {
+
+        result += chars.charAt(
+            Math.floor(Math.random() * chars.length)
+        );
+    }
+
+    return result;
+}
+
+
+// ===============================
+// TAMPILKAN WAITING ROOM
+// ===============================
+
+function showWaitingRoom() {
+
+    // Sesuaikan dengan elemen HTML yang sudah ada
+    const roomCodeElement =
+        document.getElementById("roomCode");
+
+    const waitingElement =
+        document.getElementById("waiting");
+
+    if (roomCodeElement) {
+        roomCodeElement.textContent = code;
+    }
+
+    if (waitingElement) {
+        waitingElement.style.display = "block";
+    }
+
+    console.log(
+        "Room dibuat. Kode room:",
+        code
+    );
+}
+
+
+// ===============================
+// MULAI GAME
+// ===============================
+
+function startGame() {
+
+    console.log("Game dimulai.");
+
+    state = {
+
+        players: [
+            {
+                hand: []
+            },
+            {
+                hand: []
+            }
+        ],
+
+        turn: 0,
+
+        board: [],
+
+        finished: false
+    };
+
+    // Jika fungsi shuffle / tiles dari kode lama tersedia
+    if (typeof tiles !== "undefined") {
+
+        let deck = [...tiles];
+
+        if (typeof shuffle === "function") {
+            deck = shuffle(deck);
+        }
+
+        state.players[0].hand = deck.splice(0, 7);
+        state.players[1].hand = deck.splice(0, 7);
+    }
+
+    // Kirim state awal ke pemain kedua
+    send({
+        type: "game-start",
+        state: state
+    });
+
+    if (typeof render === "function") {
+        render();
+    }
+}
+
+
+// ===============================
+// TERIMA DATA
+// ===============================
+
+function receive(data) {
+
+    if (!data) {
+        return;
+    }
+
+    switch (data.type) {
+
+        case "guest-ready":
+
+            if (role === "host") {
+
+                console.log(
+                    "Pemain kedua siap."
+                );
+
+                startGame();
+            }
+
+            break;
+
+
+        case "game-start":
+
+            state = data.state;
+
+            connected = true;
+
+            if (typeof render === "function") {
+                render();
+            }
+
+            break;
+
+
+        case "state":
+
+            state = data.state;
+
+            if (typeof render === "function") {
+                render();
+            }
+
+            break;
+
+
+        case "action":
+
+            if (role === "host") {
+
+                handleRemoteAction(data.action);
+
+            }
+
+            break;
+
+
+        case "leave":
+
+            connected = false;
+
+            alert("Pemain kedua keluar dari room.");
+
+            break;
+
+
+        default:
+
+            console.warn(
+                "Tipe data tidak dikenal:",
+                data.type
+            );
+    }
+}
+
+
+// ===============================
+// HANDLE ACTION DARI GUEST
+// ===============================
+
+function handleRemoteAction(action) {
+
+    if (!action) {
+        return;
+    }
+
+    console.log(
+        "Action dari pemain kedua:",
+        action
     );
 
+    if (action.type === "play") {
 
-const winner =
-    scores[0] === scores[1]
-        ? tieWinner(0, 1)
-        : scores[0] < scores[1]
-            ? 0
-            : 1;
+        if (typeof play === "function") {
+            play(action.index);
+        }
 
+    } else if (action.type === "discard") {
 
-state.players.forEach((p, i) => {
+        if (typeof discard === "function") {
+            discard(action.index);
+        }
 
-    p.score = scores[i];
-});
-
-
-state.players[winner].rounds++;
-
-state.starter = winner;
-
-state.round++;
+    }
+}
 
 
-document.getElementById('mTitle').textContent =
-    'Ronde selesai';
+// ===============================
+// KIRIM STATE GAME
+// ===============================
 
+function broadcastState() {
 
-document.getElementById('mBody').innerHTML =
-
-    '<h3>' +
-    state.players[winner].name +
-    ' menang!</h3>' +
-
-    '<p>' +
-    state.players[0].name +
-    ': ' +
-    scores[0] +
-    ' poin<br>' +
-
-    state.players[1].name +
-    ': ' +
-    scores[1] +
-    ' poin</p>';
-
-
-document.getElementById('modal')
-    .classList.remove('hidden');
-
-
-render();
-
-
-/*
-   Host mengirim hasil ronde.
-*/
-if (role === 'host') {
+    if (role !== "host") {
+        return;
+    }
 
     send({
-        type: 'state',
+        type: "state",
         state: state
     });
 }
-```
-
-}
-
-/* =========================================================
-PENENTU PEMENANG JIKA SKOR SAMA
-========================================================= */
-
-function tieWinner(a, b) {
-
-```
-const key = i =>
-
-    state.players[i]
-        .hand
-        .concat(state.players[i].dead)
-        .map(t => ({
-            s: t.a + t.b,
-            l: Math.min(t.a, t.b)
-        }))
-        .sort(
-            (x, y) =>
-                x.s - y.s ||
-                x.l - y.l
-        )[0] || {
-            s: 0,
-            l: 0
-        };
 
 
-const x = key(a);
+// ===============================
+// KIRIM ACTION
+// ===============================
 
-const y = key(b);
+function sendAction(action) {
 
+    if (role === "guest") {
 
-return x.s !== y.s
-    ? (x.s < y.s ? a : b)
-    : (x.l <= y.l ? a : b);
-```
+        send({
+            type: "action",
+            action: action
+        });
 
-}
+        return;
+    }
 
-/* =========================================================
-TUTUP MODAL DAN MULAI RONDE BARU
-========================================================= */
-
-function closeModal() {
-
-```
-document.getElementById('modal')
-    .classList.add('hidden');
-
-
-/*
-   Hanya host yang membuat ronde baru.
-   Ini penting supaya kedua browser tidak
-   membuat deck berbeda.
-*/
-if (role !== 'host') {
-    return;
+    handleRemoteAction(action);
 }
 
 
-const deck = shuffle(tiles());
-
-
-state.players[0].hand =
-    deck.slice(0, 14);
-
-
-state.players[1].hand =
-    deck.slice(14);
-
-
-state.players.forEach(p => {
-
-    p.dead = [];
-});
-
-
-state.chain = [];
-
-state.turn = state.starter;
-
-state.forcedDouble = true;
-
-
-/*
-   Jika starter tidak mempunyai double,
-   giliran pindah.
-*/
-if (!hasDouble(state.players[state.turn])) {
-
-    state.turn =
-        1 - state.turn;
-}
-
-
-render();
-
-
-/*
-   Kirim state ronde baru ke Player 2.
-*/
-send({
-    type: 'state',
-    state: state
-});
-```
-
-}
-
-/* =========================================================
-RENDER KARTU
-========================================================= */
-
-function tile(t, click, disabled) {
-
-```
-return (
-
-    '<div class="tile ' +
-    (click ? 'click ' : '') +
-    (disabled ? 'disabled' : '') +
-    '"' +
-
-    (
-        click && !disabled
-            ? ' onclick="play(\'' +
-              t.id +
-              '\')"'
-            : ''
-    ) +
-
-    '>' +
-
-    '<div class="half">' +
-    t.a +
-    '</div>' +
-
-    '<div class="half">' +
-    t.b +
-    '</div>' +
-
-    '</div>'
-);
-```
-
-}
-
-/* =========================================================
-RENDER GAME
-========================================================= */
-
-function render() {
-
-```
-if (!state) {
-    return;
-}
-
-
-/*
-   Informasi pemain.
-*/
-state.players.forEach((p, i) => {
-
-    document.getElementById('p' + i).innerHTML =
-
-        '<h3>' +
-
-        p.name +
-
-        ' ' +
-
-        (
-            state.turn === i
-                ? '🟡'
-                : ''
-        ) +
-
-        '</h3>' +
-
-        '<div class="score">' +
-
-        'Kartu: <b>' +
-        p.hand.length +
-        '</b><br>' +
-
-        'Dead: <b>' +
-        p.dead.length +
-        '</b><br>' +
-
-        'Menang ronde: <b>' +
-        p.rounds +
-        '</b><br>' +
-
-        'Poin ronde terakhir: <b>' +
-        p.score +
-        '</b>' +
-
-        '</div>';
-});
-
-
-/*
-   Meja.
-*/
-document.getElementById('chain').innerHTML =
-
-    state.chain.length
-
-        ? state.chain
-            .map(t => tile(t))
-            .join('')
-
-        : '<span class="muted">Meja kosong</span>';
-
-
-/*
-   Nilai ujung kiri dan kanan.
-*/
-document.getElementById('left').textContent =
-
-    state.chain.length
-        ? state.chain[0].a
-        : '—';
-
-
-document.getElementById('right').textContent =
-
-    state.chain.length
-        ? state.chain[state.chain.length - 1].b
-        : '—';
-
-
-/*
-   Kartu milik sendiri.
-*/
-const p =
-    state.players[myIndex];
-
-
-if (!p) {
-    return;
-}
-
-
-const playable =
-    p.hand.filter(can);
-
-
-const mine =
-    state.turn === myIndex;
-
-
-document.getElementById('turn').textContent =
-
-    mine
-
-        ? 'Giliran Anda — ' + p.name
-
-        : 'Giliran ' +
-          state.players[state.turn].name;
-
-
-document.getElementById('status').textContent =
-
-    mine
-
-        ? (
-            playable.length
-                ? 'Pilih kartu yang cocok.'
-                : 'Tidak ada yang cocok: pilih kartu untuk dibuang.'
-          )
-
-        : 'Menunggu giliran lawan...';
-
-
-/*
-   Jika ada kartu yang dapat dimainkan.
-*/
-if (mine && playable.length) {
-
-    document.getElementById('hand').innerHTML =
-
-        p.hand
-            .map(t => {
-
-                const isPlayable =
-                    playable.some(
-                        x => x.id === t.id
-                    );
-
-                return tile(
-                    t,
-                    true,
-                    !isPlayable
-                );
-            })
-            .join('');
-}
-
-
-/*
-   Jika tidak ada kartu yang dapat dimainkan,
-   semua kartu bisa dipilih untuk dibuang.
-*/
-else if (mine && !playable.length) {
-
-    document.getElementById('hand').innerHTML =
-
-        p.hand
-            .map(t =>
-
-                '<div onclick="discard(\'' +
-                t.id +
-                '\')" class="tile click">' +
-
-                '<div class="half">' +
-                t.a +
-                '</div>' +
-
-                '<div class="half">' +
-                t.b +
-                '</div>' +
-
-                '</div>'
-            )
-            .join('');
-}
-
-
-/*
-   Lawan sedang bermain.
-*/
-else {
-
-    document.getElementById('hand').innerHTML =
-
-        p.hand
-            .map(t => tile(t, false, false))
-            .join('');
-}
-
-
-document.getElementById('action').textContent =
-
-    mine && !playable.length
-
-        ? 'Karena tidak ada langkah legal, klik satu kartu untuk membuangnya sebagai dead tile.'
-
-        : '';
-
-
-document.getElementById('roomLabel').textContent =
-    'Room: ' + code;
-```
-
-}
-
-/* =========================================================
-KELUAR ROOM
-========================================================= */
+// ===============================
+// MODIFIKASI PLAY
+// ===============================
+
+const originalPlay =
+    typeof play === "function"
+        ? play
+        : null;
+
+
+// ===============================
+// KELUAR ROOM
+// ===============================
 
 function leaveRoom() {
 
-```
-connected = false;
+    try {
 
-gameStarted = false;
+        if (dc) {
 
+            try {
 
-try {
+                send({
+                    type: "leave"
+                });
 
-    if (dc) {
-        dc.close();
+            } catch (e) {}
+
+            dc.close();
+        }
+
+        if (peer) {
+            peer.destroy();
+        }
+
+    } catch (err) {
+
+        console.error(err);
     }
 
-} catch (e) {}
+    dc = null;
+    peer = null;
 
+    connected = false;
+    role = null;
+    code = "";
+    state = null;
 
-try {
+    console.log("Keluar room.");
 
-    if (peer) {
-        peer.destroy();
-    }
-
-} catch (e) {}
-
-
-/*
-   Kembali ke halaman awal.
-*/
-location.reload();
-```
-
+    location.reload();
 }
 
-/* =========================================================
-DIAGNOSTIK
-========================================================= */
+
+// ===============================
+// HANDLE CLOSE WINDOW
+// ===============================
+
+window.addEventListener(
+    "beforeunload",
+    () => {
+
+        try {
+
+            if (dc && dc.open) {
+
+                dc.send({
+                    type: "leave"
+                });
+            }
+
+        } catch (e) {}
+    }
+);
+
+
+// ===============================
+// DEBUG
+// ===============================
 
 console.log(
-'%cGAPLE siap. Networking menggunakan PeerJS.',
-'color:#f4c95d;font-weight:bold;'
+    "Sistem multiplayer Gaple siap."
 );
 
 </script></body></html>
