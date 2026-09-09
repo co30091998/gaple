@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gaple Guest Room</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#08151b;color:#eef7f5}
+button,input{font:inherit}button{border:0;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer}
+.wrap{max-width:1100px;margin:auto;padding:20px}.card{background:#122832;border:1px solid #294954;border-radius:18px;padding:22px;box-shadow:0 12px 35px #0005}
+.center{max-width:520px;margin:8vh auto}.field{margin:14px 0}.field label{display:block;color:#aac0c5;font-size:13px;margin-bottom:6px}.field input{width:100%;padding:12px;border-radius:9px;border:1px solid #395762;background:#0b1b22;color:#fff}
+.primary{background:#f4c95d;color:#162019}.secondary{background:#294b59;color:#fff}.code{font-size:35px;letter-spacing:8px;font-weight:900;background:#0b1b22;padding:15px;border-radius:12px;text-align:center;margin:15px 0}
+.hidden{display:none!important}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.game{display:grid;grid-template-columns:210px 1fr 210px;gap:14px}.player{min-height:140px}.active{outline:2px solid #f4c95d}.score{color:#aac0c5;font-size:13px;line-height:1.7}
+.board{min-height:420px;background:#0b4c43;border:8px solid #79542f;border-radius:18px;padding:18px;display:flex;flex-direction:column;justify-content:center;box-shadow:inset 0 0 35px #0007}.ends{display:flex;justify-content:space-between;font-size:13px}.chain{display:flex;overflow:auto;align-items:center;gap:4px;min-height:110px;padding:15px}
+.tile{flex:0 0 48px;width:48px;height:82px;background:#f6f1df;color:#172027;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:space-around;font-weight:900;box-shadow:0 3px 6px #0005}.half{height:50%;width:100%;display:flex;align-items:center;justify-content:center;font-size:20px}.half:first-child{border-bottom:1px solid #aaa}.hand{display:flex;overflow:auto;gap:9px;padding:8px 2px 14px}.hand .tile{flex-basis:52px;width:52px;height:88px}.click{cursor:pointer}.click:hover{transform:translateY(-4px);outline:2px solid #f4c95d}.disabled{opacity:.4}.status{text-align:center;font-weight:700;margin:10px}.muted{color:#aac0c5}.modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;padding:20px}.modal .card{max-width:500px;text-align:center;width:100%}
+@media(max-width:850px){.game{grid-template-columns:1fr}.player{min-height:auto}.board{min-height:320px}}
+</style></head>
+<body><div class="wrap">
+
+<section id="home" class="card center">
+<h1>🁣 Gaple Guest Room</h1>
+<p class="muted">Main berdua dari perangkat berbeda menggunakan kode room. Tidak perlu akun.</p>
+<div class="field"><label>Nama Anda</label><input id="name" value="Guest"></div>
+<button class="primary" onclick="createRoom()">Buat Room</button>
+<div style="text-align:center;margin:18px">atau</div>
+<div class="field"><label>Kode Room</label><input id="joinCode" placeholder="Contoh: AB7K2" maxlength="5" style="text-transform:uppercase"></div>
+<button class="secondary" onclick="joinRoom()">Gabung Room</button>
+<p id="homeMsg" class="muted"></p>
+</section>
+
+<section id="room" class="card center hidden">
+<h2>Room dibuat</h2><p>Bagikan kode ini kepada pemain kedua:</p><div id="roomCode" class="code"></div>
+<p id="roomStatus" class="muted">Menunggu pemain kedua...</p>
+<button class="secondary" onclick="leaveRoom()">Keluar Room</button>
+</section>
+
+<section id="game" class="hidden">
+<div class="top"><div><h1>🁣 GAPLE</h1><span id="roomLabel" class="muted"></span></div><button class="secondary" onclick="leaveRoom()">Keluar</button></div>
+<div class="game">
+<div id="p0" class="card player"></div>
+<main>
+<div class="board"><div class="ends"><span>Kiri: <b id="left">—</b></span><span>Kanan: <b id="right">—</b></span></div><div id="chain" class="chain"></div><div id="status" class="status"></div></div>
+<div class="card" style="margin-top:14px"><b id="turn"></b><div id="hand" class="hand"></div><div id="action" class="muted"></div></div>
+</main>
+<div id="p1" class="card player"></div>
+</div></section>
+
+<div id="modal" class="modal hidden"><div class="card"><h2 id="mTitle"></h2><div id="mBody"></div><button class="primary" onclick="closeModal()">Lanjut</button></div></div>
+</div>
+<script>
+/*
+  Demo networking tanpa database:
+  WebRTC DataChannel + kode room.
+  Signaling awal menggunakan WebSocket publik gratis (broker).
+  Setelah koneksi terbentuk, gameplay berjalan peer-to-peer.
+  Tidak ada database game/account.
+*/
+const SIGNAL='wss://ws.postman-echo.com/raw';
+let ws,pc,dc,role,code,state,myIndex,connected=false;
+
+const tiles=()=>{let a=[];for(let i=0;i<=6;i++)for(let j=i;j<=6;j++)a.push({a:i,b:j,id:i+'-'+j});return a};
+const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+function rnd(){return Math.random().toString(36).slice(2,7).toUpperCase()}
+function msg(x){document.getElementById('homeMsg').textContent=x}
+function send(x){if(dc&&dc.readyState==='open')dc.send(JSON.stringify(x))}
+function setupWS(){
+ ws=new WebSocket(SIGNAL);
+ ws.onopen=()=>{ws.send(JSON.stringify({kind:'room',room:code,role,offer:role==='host'?pc.localDescription:null}))};
+ ws.onmessage=async e=>{let m;try{m=JSON.parse(e.data)}catch{return}
+   if(m.room!==code)return;
+   if(role==='guest'&&m.offer){await pc.setRemoteDescription(m.offer);let ans=await pc.createAnswer();await pc.setLocalDescription(ans);ws.send(JSON.stringify({kind:'room',room:code,role:'guest',answer:ans}))}
+   if(role==='host'&&m.answer){await pc.setRemoteDescription(m.answer)}
+ };
+}
+function makePC(){
+ pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+ pc.onicecandidate=()=>{};
+ pc.onconnectionstatechange=()=>{connected=pc.connectionState==='connected';if(connected){document.getElementById('roomStatus').textContent='Pemain terhubung!';if(role==='host')startGame()}}
+ if(role==='guest')pc.ondatachannel=e=>attachDC(e.channel);
+}
+function attachDC(x){dc=x;dc.onopen=()=>{connected=true;document.getElementById('room').classList.add('hidden');document.getElementById('game').classList.remove('hidden');send({type:'hello',name:document.getElementById('name').value.trim()||'Guest'});};dc.onmessage=e=>receive(JSON.parse(e.data))}
+async function createRoom(){
+ role='host';myIndex=0;code=rnd();document.getElementById('roomCode').textContent=code;document.getElementById('home').classList.add('hidden');document.getElementById('room').classList.remove('hidden');
+ makePC();dc=pc.createDataChannel('gaple');attachDC(dc);let offer=await pc.createOffer();await pc.setLocalDescription(offer);setupWS();
+}
+async function joinRoom(){
+ code=(document.getElementById('joinCode').value||'').trim().toUpperCase();if(code.length!==5)return msg('Kode room harus 5 karakter.');
+ role='guest';myIndex=1;document.getElementById('home').classList.add('hidden');document.getElementById('room').classList.remove('hidden');document.getElementById('roomCode').textContent=code;document.getElementById('roomStatus').textContent='Menghubungkan...';makePC();setupWS();
+}
+function startGame(){
+ let deck=shuffle(tiles());state={players:[{name:document.getElementById('name').value.trim()||'Guest',hand:deck.slice(0,14),dead:[],score:0,rounds:0},{name:'Menunggu...',hand:deck.slice(14),dead:[],score:0,rounds:0}],chain:[],turn:0,starter:0,round:1,forcedDouble:false,started:true};
+ send({type:'state',state});showGame();
+}
+function showGame(){document.getElementById('room').classList.add('hidden');document.getElementById('game').classList.remove('hidden');render()}
+function receive(m){
+ if(m.type==='hello'){state.players[1].name=m.name;send({type:'state',state});showGame()}
+ if(m.type==='state'){state=m.state;render()}
+ if(m.type==='action'){apply(m.action,true)}
+}
+function hasDouble(p){return p.hand.some(t=>t.a===t.b)}
+function can(t){
+ if(!state.chain.length)return !state.forcedDouble||t.a===t.b;
+ let l=state.chain[0].a,r=state.chain[state.chain.length-1].b;return t.a===l||t.b===l||t.a===r||t.b===r
+}
+function play(id){
+ if(myIndex!==state.turn)return;
+ let t=state.players[myIndex].hand.find(x=>x.id===id);if(!t||!can(t))return;
+ apply({kind:'play',id},false)
+}
+function discard(id){
+ if(myIndex!==state.turn)return;let p=state.players[myIndex];if(p.hand.some(can))return;
+ apply({kind:'discard',id},false)
+}
+function apply(a,remote){
+ let p=state.players[state.turn];
+ if(a.kind==='play'){
+  let t=p.hand.find(x=>x.id===a.id);if(!t||!can(t))return;
+  if(!state.chain.length)state.chain=[t];else{let l=state.chain[0].a,r=state.chain[state.chain.length-1].b;if(t.b===l||t.a===l)state.chain.unshift(t);else if(t.a===r||t.b===r)state.chain.push(t);else return}
+  p.hand=p.hand.filter(x=>x.id!==t.id);state.forcedDouble=false;
+ }else{let t=p.hand.find(x=>x.id===a.id);if(!t||p.hand.some(can))return;p.hand=p.hand.filter(x=>x.id!==t.id);p.dead.push(t)}
+ if(!p.hand.length){finish(state.turn);return}
+ state.turn=1-state.turn;render();if(!remote)send({type:'action',action:a})
+}
+function finish(w){
+ let scores=state.players.map(p=>p.hand.concat(p.dead).reduce((s,t)=>s+t.a+t.b,0));
+ let winner=scores[0]===scores[1]?tieWinner(0,1):scores[0]<scores[1]?0:1;
+ state.players.forEach((p,i)=>{p.score=scores[i]});state.players[winner].rounds++;state.starter=winner;state.round++;
+ document.getElementById('mTitle').textContent='Ronde selesai';document.getElementById('mBody').innerHTML=`<h3>${state.players[winner].name} menang!</h3><p>${state.players[0].name}: ${scores[0]} poin<br>${state.players[1].name}: ${scores[1]} poin</p>`;
+ document.getElementById('modal').classList.remove('hidden');render();send({type:'state',state})
+}
+function tieWinner(a,b){
+ let key=i=>state.players[i].hand.concat(state.players[i].dead).map(t=>({s:t.a+t.b,l:Math.min(t.a,t.b)})).sort((x,y)=>x.s-y.s||x.l-y.l)[0]||{s:0,l:0};
+ let x=key(a),y=key(b);return x.s!==y.s?(x.s<y.s?a:b):(x.l<=y.l?a:b)
+}
+function closeModal(){
+ document.getElementById('modal').classList.add('hidden');
+ let deck=shuffle(tiles());state.players[0].hand=deck.slice(0,14);state.players[1].hand=deck.slice(14);state.players.forEach(p=>p.dead=[]);state.chain=[];state.turn=state.starter;state.forcedDouble=true;
+ if(!hasDouble(state.players[state.turn]))state.turn=1-state.turn;
+ render();send({type:'state',state})
+}
+function tile(t,click,disabled){return `<div class="tile ${click?'click':''} ${disabled?'disabled':''}" ${click&&!disabled?`onclick="play('${t.id}')"`:''}><div class="half">${t.a}</div><div class="half">${t.b}</div></div>`}
+function render(){
+ if(!state)return;
+ state.players.forEach((p,i)=>document.getElementById('p'+i).innerHTML=`<h3>${p.name} ${state.turn===i?'🟡':''}</h3><div class="score">Kartu: <b>${p.hand.length}</b><br>Dead: <b>${p.dead.length}</b><br>Menang ronde: <b>${p.rounds}</b><br>Poin ronde terakhir: <b>${p.score}</b></div>`);
+ document.getElementById('chain').innerHTML=state.chain.length?state.chain.map(t=>tile(t)).join(''):'<span class="muted">Meja kosong</span>';
+ document.getElementById('left').textContent=state.chain.length?state.chain[0].a:'—';document.getElementById('right').textContent=state.chain.length?state.chain.at(-1).b:'—';
+ let p=state.players[myIndex], playable=p.hand.filter(can), mine=state.turn===myIndex;
+ document.getElementById('turn').textContent=mine?`Giliran Anda — ${p.name}`:`Giliran ${state.players[state.turn].name}`;
+ document.getElementById('status').textContent=mine?(playable.length?'Pilih kartu yang cocok.':'Tidak ada yang cocok: pilih kartu untuk dibuang.'):'Menunggu giliran lawan...';
+ document.getElementById('hand').innerHTML=p.hand.map(t=>tile(t,mine&&!playable.length?false:mine,!playable.some(x=>x.id===t.id)&&mine)).join('');
+ if(mine&&!playable.length){document.getElementById('hand').innerHTML=p.hand.map(t=>`<div onclick="discard('${t.id}')" class="tile click"><div class="half">${t.a}</div><div class="half">${t.b}</div></div>`).join('')}
+ document.getElementById('action').textContent=mine&&!playable.length?'Karena tidak ada langkah legal, klik satu kartu untuk membuangnya sebagai dead tile.':'';
+ document.getElementById('roomLabel').textContent='Room: '+code
+}
+function leaveRoom(){location.reload()}
+</script></body></html>
