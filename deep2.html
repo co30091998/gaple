@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gaple Guest Room</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#fff;color:#172027}
+button,input,select{font:inherit}button{border:0;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer}
+.wrap{max-width:1100px;margin:auto;padding:20px}.card{background:#fff;border:1px solid #d9d9d9;border-radius:18px;padding:22px;box-shadow:0 12px 35px #0005}
+.center{max-width:520px;margin:8vh auto}.field{margin:14px 0}.field label{display:block;color:#aac0c5;font-size:13px;margin-bottom:6px}.field input{width:100%;padding:12px;border-radius:9px;border:1px solid #395762;background:#fff;color:#172027}
+.primary{background:#f4c95d;color:#162019}.secondary{background:#294b59;color:#fff}.code{font-size:35px;letter-spacing:8px;font-weight:900;background:#f5f5f5;padding:15px;border-radius:12px;text-align:center;margin:15px 0}
+.hidden{display:none!important}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.game{display:grid;grid-template-columns:210px 1fr 210px;gap:14px}.player{min-height:140px}.score{color:#aac0c5;font-size:13px;line-height:1.7}
+.board{min-height:420px;background:#fff;border:2px solid #222;border-radius:18px;padding:18px;display:flex;flex-direction:column;box-shadow:none}.ends{display:flex;justify-content:space-between;font-size:13px}.chain{display:block;min-height:110px;padding:15px}
+.tile{flex:0 0 48px;width:48px;height:82px;background:#fff;color:#c62828;border:2px solid #222;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:space-around;font-weight:900;box-shadow:0 3px 6px #0002}.half{height:50%;width:100%;display:grid;grid-template-columns:repeat(3,7px);grid-template-rows:repeat(3,7px);gap:2px;align-items:center;justify-content:center}.half:first-child{border-bottom:1px solid #aaa}.pip{width:5px;height:5px;background:#d71920;border-radius:50%;display:block}.pip.p1{grid-column:1;grid-row:1}.pip.p2{grid-column:2;grid-row:1}.pip.p3{grid-column:3;grid-row:1}.pip.p4{grid-column:1;grid-row:2}.pip.p5{grid-column:2;grid-row:2}.pip.p6{grid-column:3;grid-row:2}.pip.p7{grid-column:1;grid-row:3}.pip.p8{grid-column:2;grid-row:3}.pip.p9{grid-column:3;grid-row:3}.chain .tile.middle{width:82px;height:48px;flex-direction:row}.chain .tile.middle .half{height:100%;width:50%}.chain .tile.middle .half:first-child{border-bottom:0;border-right:1px solid #aaa}
+.stock{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;padding:8px;border:1px dashed #bbb;border-radius:10px}.stock-card{width:38px;height:62px;border:2px solid #222;border-radius:6px;background:#f3f3f3;display:flex;align-items:center;justify-content:center;font-weight:900;cursor:pointer}.stock-card:hover{transform:translateY(-3px);outline:2px solid #f4c95d}.pass-btn{margin-top:8px}.hand{display:flex;overflow:auto;gap:9px;padding:8px 2px 14px}.hand .tile{flex-basis:52px;width:52px;height:88px}.click{cursor:pointer}.click:hover{transform:translateY(-4px);outline:2px solid #f4c95d}.disabled{opacity:.4}.status{text-align:center;font-weight:700;margin:10px}.muted{color:#666}.modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;padding:20px;z-index:100}.modal .card{max-width:500px;text-align:center;width:100%}
+.rename-btn{background:transparent!important;border:0!important;padding:2px 6px!important;margin-left:4px;cursor:pointer;font-size:13px;opacity:.55;color:inherit}.rename-btn:hover{opacity:1;background:transparent!important}
+@media(max-width:850px){.game{grid-template-columns:1fr}.player{min-height:auto}.board{min-height:320px}}
+</style><style>
+html,body{background:#111!important;color:#e7ecef!important}.wrap{background:transparent!important}
+#game{background:transparent!important;border:0!important;outline:0!important;box-shadow:none!important}#game>.top{background:transparent!important;border:0!important;outline:0!important;box-shadow:none!important}
+.card,.player,#p0,#p1,#hand,#action{background:#181818!important;color:#e7ecef!important;border-color:#333!important}.card h1,.card h2,.card h3,.card b{color:#f2f2f2!important}.code{background:#202020!important;color:#f4c95d!important;border:1px solid #444!important}.field input,.field select{background:#242424!important;color:#fff!important;border-color:#45545a!important;width:100%;padding:12px;border-radius:9px;border:1px solid #45545a}.muted,.score{color:#aeb8bc!important}
+.board{position:relative!important;background:radial-gradient(ellipse at center,#1b7a43 0%,#126637 58%,#0b4a28 100%)!important;border:18px solid #5a351d!important;border-radius:28px!important;box-shadow:inset 0 0 0 4px #2c180d,inset 0 0 0 7px #8a5a32,inset 0 0 32px rgba(0,0,0,.55),0 12px 28px rgba(0,0,0,.55)!important;max-height:calc(100vh - 90px)!important;overflow:auto!important;justify-content:flex-start!important}
+.chain{position:relative!important;display:block!important;width:622px!important;min-width:622px!important;padding:0!important;margin:0 auto!important;overflow:visible!important}
+.chain>.tile{position:absolute!important;margin:0!important;flex:none!important}
+.chain .tile.middle{width:82px!important;height:48px!important;flex-direction:row!important}
+.chain .tile.middle .half{height:100%!important;width:50%!important}
+.chain .tile.middle .half:first-child{border-bottom:0!important;border-right:1px solid #aaa!important}
+.chain .tile.middle.flip{flex-direction:row-reverse!important}
+.chain .tile.middle.flip .half:first-child{border-right:0!important;border-left:1px solid #aaa!important}
+.chain>.tile:not(.middle){width:48px!important;height:82px!important}
+.stock{background:#202020!important;border:1px solid #444!important;border-radius:12px;padding:12px;position:relative;z-index:20}.stock-stack{position:relative;width:190px;height:88px;margin:2px auto 8px}.stock-card{position:absolute!important;left:calc(var(--i)*11px);top:calc(var(--i)*-2px);width:56px!important;height:72px!important;padding:0!important;margin:0!important;background:linear-gradient(135deg,#315766,#162b34)!important;color:#f4c95d!important;border:2px solid #c9a66b!important;border-radius:8px!important;cursor:pointer!important;pointer-events:auto!important;box-shadow:0 4px 8px rgba(0,0,0,.5);z-index:calc(20 + var(--i));transition:transform .12s,filter .12s}.stock-card:hover{transform:translateY(-10px) rotate(calc((var(--i) - 4)*1deg));filter:brightness(1.15);outline:2px solid #f4c95d}.stock-card:active{transform:translateY(-4px) scale(.97)}.back-mark{font-size:21px;opacity:.9}.stock-count{text-align:center;color:#aeb8bc;font-size:12px}
+@media(max-width:850px){.game{grid-template-columns:1fr}.board{min-height:320px;max-height:calc(100vh - 70px)!important}.chain{width:622px!important;min-width:622px!important}}
+</style>
+</head>
+<body><div class="wrap">
+
+<section id="home" class="card center">
+<h1>🁣 Gaple Guest Room</h1>
+<p class="muted">Main berdua dari perangkat berbeda menggunakan kode room. Tidak perlu akun.</p>
+<div class="field"><label>Nama Anda</label><input id="name" value="Guest" maxlength="20"></div>
+<div class="field"><label>Target Poin Kemenangan (dipakai pembuat room)</label>
+<select id="targetScore">
+<option value="25">25 poin</option>
+<option value="50">50 poin</option>
+<option value="100" selected>100 poin</option>
+<option value="200">200 poin</option>
+</select></div>
+<button class="primary" onclick="createRoom()">Buat Room</button>
+<div style="text-align:center;margin:18px">atau</div>
+<div class="field"><label>Kode Room</label><input id="joinCode" placeholder="Contoh: AB7K2" maxlength="5" style="text-transform:uppercase"></div>
+<button class="secondary" onclick="joinRoom()">Gabung Room</button>
+<p id="homeMsg" class="muted"></p>
+</section>
+
+<section id="room" class="card center hidden">
+<h2>Room dibuat</h2><p>Bagikan kode ini kepada pemain kedua:</p><div id="roomCode" class="code"></div>
+<p id="roomStatus" class="muted">Menunggu pemain kedua...</p>
+<button class="secondary" onclick="leaveRoom()">Keluar Room</button>
+</section>
+
+<section id="game" class="hidden">
+<div class="top"><div><h1>🁣 GAPLE</h1><span id="roomLabel" class="muted"></span></div><button class="secondary" onclick="leaveRoom()">Keluar</button></div>
+<div class="game">
+<div id="p0" class="card player"></div>
+<main>
+<div class="board"><div class="ends"><span>Kiri: <b id="left">—</b></span><span>Kanan: <b id="right">—</b></span></div><div id="chain" class="chain"></div><div id="status" class="status"></div></div>
+<div class="card" style="margin-top:14px"><b id="turn"></b><div id="hand" class="hand"></div><div id="action" class="muted"></div></div>
+</main>
+<div id="p1" class="card player"></div>
+</div></section>
+
+<div id="modal" class="modal hidden"><div class="card"><h2 id="mTitle"></h2><div id="mBody"></div><button class="primary" id="mBtn" onclick="modalAction()">Lanjut</button></div></div>
+</div>
+<script>
+/* =========================================================
+GAPLE INDONESIA - PeerJS
+Fitur:
+- Nama pemain bisa diisi di halaman awal & diubah kapan saja
+- Buffer nama tamu (anti race condition)
+- Target poin 25/50/100/200
+- Pop-up GAP sebelum perhitungan
+- Ready handshake antar pemain
+- Reset permainan setelah match over
+- Layout kartu ular turun ke bawah
+========================================================= */
+
+let peer = null, dc = null, role = null, code = null;
+let state = null, myIndex = null, connected = false, gameStarted = false;
+let shownRoundKey = null, modalStep = null;
+let myReady = false, oppReady = false, busy = false;
+let nextSeq = 0, lastAcceptedSeq = 0;
+let pendingGuestName = null;   // buffer nama tamu jika hello datang sebelum state siap
+
+/* ---------- LOAD PEERJS ---------- */
+function loadPeerJS() {
+    return new Promise((resolve, reject) => {
+        if (typeof Peer !== 'undefined') return resolve();
+        const s = document.createElement('script');
+        s.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+        s.onload = () => typeof Peer !== 'undefined' ? resolve() : reject(new Error('PeerJS gagal dimuat.'));
+        s.onerror = () => reject(new Error('Tidak dapat memuat PeerJS.'));
+        document.head.appendChild(s);
+    });
+}
+
+/* ---------- UTIL ---------- */
+const tiles = () => { const a = []; for (let i=0;i<=6;i++) for (let j=i;j<=6;j++) a.push({a:i,b:j,id:i+'-'+j}); return a; };
+const shuffle = a => { a=[...a]; for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+function rnd(){ const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let r=''; for(let i=0;i<5;i++) r+=c[Math.floor(Math.random()*c.length)]; return r; }
+function msg(x){ const el=document.getElementById('homeMsg'); if(el) el.textContent=x; }
+
+function cleanName(n) {
+    const s = (n || '').toString().trim().slice(0, 20);
+    return s || 'Guest';
+}
+
+function send(x){
+    if (!dc || dc.open === false) return false;
+    try { dc.send(x); return true; } catch(e){ console.error(e); return false; }
+}
+
+/* ---------- BUAT PEER ---------- */
+function createPeer(peerId = null) {
+    try { peer = peerId ? new Peer(peerId,{debug:1}) : new Peer({debug:1}); }
+    catch (err){ console.error(err); msg('Gagal membuat koneksi PeerJS.'); return; }
+
+    peer.on('open', id => {
+        if (role === 'host') {
+            code = id;
+            document.getElementById('roomCode').textContent = code;
+            document.getElementById('roomStatus').textContent = 'Menunggu pemain kedua...';
+        }
+        if (role === 'guest') {
+            document.getElementById('roomStatus').textContent = 'Menghubungkan ke room ' + code + '...';
+            connectToHost();
+        }
+    });
+
+    peer.on('connection', connection => {
+        if (role !== 'host') return;
+        if (dc && dc.open) { connection.close(); return; }
+        attachDC(connection);
+    });
+
+    peer.on('error', err => {
+        console.error('PeerJS error:', err);
+        if (err.type === 'unavailable-id' && role === 'host') {
+            try { peer.destroy(); } catch(e){}
+            setTimeout(() => { code = rnd(); document.getElementById('roomCode').textContent = code; createPeer(code); }, 300);
+            return;
+        }
+        if (err.type === 'peer-unavailable') { document.getElementById('roomStatus').textContent = 'Room tidak ditemukan atau sudah ditutup.'; return; }
+        if (err.type === 'network') { document.getElementById('roomStatus').textContent = 'Koneksi jaringan bermasalah.'; return; }
+        document.getElementById('roomStatus').textContent = 'Koneksi gagal: ' + (err.message||err.type||'Unknown');
+    });
+
+    peer.on('disconnected', () => {
+        if (!connected) {
+            document.getElementById('roomStatus').textContent = 'Koneksi ke server terputus. Mencoba menghubungkan kembali...';
+            try { peer.reconnect(); } catch(e){}
+        }
+    });
+
+    peer.on('close', () => { connected = false; });
+}
+
+function connectToHost() {
+    if (!peer || !code) return;
+    try { attachDC(peer.connect(code, { reliable:true, serialization:'json' })); }
+    catch (err){ console.error('Gagal connect:', err); document.getElementById('roomStatus').textContent = 'Gagal menghubungkan ke room.'; }
+}
+
+/* ---------- DATA CONNECTION ---------- */
+function attachDC(connection) {
+    if (!connection) return;
+    dc = connection;
+
+    dc.on('open', () => {
+        connected = true;
+        document.getElementById('roomStatus').textContent = 'Pemain terhubung!';
+        document.getElementById('room').classList.add('hidden');
+        document.getElementById('game').classList.remove('hidden');
+        if (role === 'guest') {
+            send({ type:'hello', name: cleanName(document.getElementById('name').value) });
+        }
+        if (role === 'host' && !gameStarted) startGame();
+    });
+
+    dc.on('data', data => {
+        try {
+            let m = data;
+            if (typeof data === 'string') m = JSON.parse(data);
+            receive(m);
+        } catch (err){ console.error('Data dari lawan tidak valid:', err); }
+    });
+
+    dc.on('close', () => { connected = false; document.getElementById('status').textContent = 'Pemain lain terputus dari permainan.'; });
+    dc.on('error', () => { connected = false; document.getElementById('roomStatus').textContent = 'Koneksi pemain bermasalah.'; });
+}
+
+/* ---------- BUAT / GABUNG ROOM ---------- */
+async function createRoom() {
+    try { await loadPeerJS(); } catch(e){ msg('PeerJS gagal dimuat. Periksa koneksi internet.'); return; }
+    role='host'; myIndex=0; gameStarted=false; code=rnd();
+    document.getElementById('roomCode').textContent = code;
+    document.getElementById('home').classList.add('hidden');
+    document.getElementById('room').classList.remove('hidden');
+    document.getElementById('roomStatus').textContent = 'Menghubungkan ke server...';
+    createPeer(code);
+}
+async function joinRoom() {
+    const input=(document.getElementById('joinCode').value||'').trim().toUpperCase();
+    if (input.length!==5){ msg('Kode room harus 5 karakter.'); return; }
+    try { await loadPeerJS(); } catch(e){ msg('PeerJS gagal dimuat. Periksa koneksi internet.'); return; }
+    role='guest'; myIndex=1; code=input; gameStarted=false;
+    document.getElementById('home').classList.add('hidden');
+    document.getElementById('room').classList.remove('hidden');
+    document.getElementById('roomCode').textContent = code;
+    document.getElementById('roomStatus').textContent = 'Menghubungkan ke room ' + code + '...';
+    createPeer();
+}
+
+/* ---------- MULAI GAME ---------- */
+function startGame() {
+    if (gameStarted || role !== 'host') return;
+    gameStarted = true;
+    const target = parseInt(document.getElementById('targetScore').value,10) || 100;
+    const deck = shuffle(tiles());
+    state = {
+        players: [
+            { name: cleanName(document.getElementById('name').value), hand: deck.slice(0,7), score:0, rounds:0 },
+            { name: pendingGuestName || 'Menunggu...', hand: deck.slice(7,14), score:0, rounds:0 }
+        ],
+        chain: [], stock: deck.slice(14),
+        turn: 0, starter: 0, round: 1,
+        forcedDouble: false, passCount: 0,
+        targetScore: target, roundResult: null,
+        started: true
+    };
+    nextSeq = 0; lastAcceptedSeq = 0;
+    showGame();
+    send({ type:'state', state });
+}
+
+function showGame() {
+    document.getElementById('room').classList.add('hidden');
+    document.getElementById('game').classList.remove('hidden');
+    render();
+}
+
+/* ---------- TERIMA DATA ---------- */
+function receive(m) {
+    if (!m || !m.type) return;
+
+    if (m.type === 'hello') {
+        if (role !== 'host') return;
+        // Simpan/buffer nama tamu walau state belum siap
+        pendingGuestName = cleanName(m.name);
+        if (state) {
+            state.players[1].name = pendingGuestName;
+            send({ type:'state', state });
+            render();
+        }
+        return;
+    }
+
+    if (m.type === 'rename') {
+        if (role !== 'host') return;
+        if (!state) return;
+        const idx = m.from;
+        if (idx !== 0 && idx !== 1) return;
+        state.players[idx].name = cleanName(m.name);
+        send({ type:'state', state });
+        render();
+        return;
+    }
+
+    if (m.type === 'state') {
+        if (!m.state) return;
+        const hadResult = state && state.roundResult;
+        state = m.state;
+        busy = false;
+        myReady = false;
+        oppReady = false;
+        gameStarted = true;
+        showGame();
+        if (!state.roundResult && hadResult) { hideModal(); shownRoundKey = null; }
+        return;
+    }
+
+    if (m.type === 'action') {
+        if (!state) return;
+        if (m.from !== state.turn) return;
+        if (typeof m.seq === 'number') {
+            if (m.seq <= lastAcceptedSeq) return;
+            lastAcceptedSeq = m.seq;
+        }
+        apply(m.action);
+        return;
+    }
+
+    if (m.type === 'ready') {
+        oppReady = true;
+        if (role === 'host') tryNext();
+        return;
+    }
+
+    if (m.type === 'ping') { send({ type:'pong' }); return; }
+}
+
+/* ---------- UBAH NAMA (dari UI) ---------- */
+function renameMe() {
+    if (!state) return;
+    const cur = state.players[myIndex].name;
+    const inp = window.prompt('Masukkan nama baru:', cur);
+    if (inp === null) return;
+    const newName = cleanName(inp);
+    if (newName === cur) return;
+
+    // Update lokal untuk feedback cepat
+    state.players[myIndex].name = newName;
+    render();
+
+    if (role === 'host') {
+        send({ type:'state', state });
+    } else {
+        send({ type:'rename', name: newName, from: myIndex });
+    }
+}
+
+/* ---------- CEK ---------- */
+const hasDouble = p => p.hand.some(t => t.a === t.b);
+
+function can(t) {
+    if (!state) return false;
+    if (!state.chain.length) return !state.forcedDouble || t.a === t.b;
+    const l = state.chain[0].a;
+    const r = state.chain[state.chain.length-1].b;
+    return (t.a===l || t.b===l || t.a===r || t.b===r);
+}
+
+/* ---------- AKSI DARI CLIENT ---------- */
+function play(id) {
+    if (busy) return;
+    if (!state || myIndex !== state.turn) return;
+    const t = state.players[myIndex].hand.find(x => x.id === id);
+    if (!t || !can(t)) return;
+    if (role !== 'host') {
+        busy = true; nextSeq++;
+        send({ type:'action', action:{ kind:'play', id }, from: myIndex, seq: nextSeq });
+        return;
+    }
+    apply({ kind:'play', id });
+}
+
+function drawCard(event) {
+    if (event) { event.preventDefault(); event.stopPropagation(); }
+    if (busy) return;
+    if (!state || myIndex !== state.turn) return;
+    if (role !== 'host') {
+        busy = true; nextSeq++;
+        send({ type:'action', action:{ kind:'draw' }, from: myIndex, seq: nextSeq });
+        return;
+    }
+    apply({ kind:'draw' });
+}
+
+function doPass() {
+    if (busy) return;
+    if (!state || myIndex !== state.turn) return;
+    if (role !== 'host') {
+        busy = true; nextSeq++;
+        send({ type:'action', action:{ kind:'pass' }, from: myIndex, seq: nextSeq });
+        return;
+    }
+    apply({ kind:'pass' });
+}
+
+/* ---------- TERAPKAN AKSI (host otoritatif) ---------- */
+function apply(a) {
+    if (!state || !a) return;
+    const p = state.players[state.turn];
+    if (!p) return;
+
+    if (a.kind === 'draw') {
+        if (p.hand.some(can) || !state.stock.length) return;
+        p.hand.push(state.stock.shift());
+        if (p.hand.some(can)) state.passCount = 0;
+        else if (!state.stock.length) {
+            state.turn = 1 - state.turn;
+            state.passCount = (state.passCount||0) + 1;
+            if (state.passCount >= 2) { finish(state.turn, 'gap'); return; }
+        }
+        return renderAndBroadcast();
+    }
+
+    if (a.kind === 'pass') {
+        if (p.hand.some(can) || state.stock.length) return;
+        state.passCount = (state.passCount||0) + 1;
+        state.turn = 1 - state.turn;
+        if (state.passCount >= 2) { finish(state.turn, 'gap'); return; }
+        return renderAndBroadcast();
+    }
+
+    if (a.kind === 'play') {
+        const t = p.hand.find(x => x.id === a.id);
+        if (!t || !can(t)) return;
+        if (!state.chain.length) state.chain = [t];
+        else {
+            const l = state.chain[0].a;
+            const r = state.chain[state.chain.length-1].b;
+            if (t.b === l) state.chain.unshift(t);
+            else if (t.a === l) state.chain.unshift({a:t.b,b:t.a,id:t.id});
+            else if (t.a === r) state.chain.push(t);
+            else if (t.b === r) state.chain.push({a:t.b,b:t.a,id:t.id});
+            else return;
+        }
+        p.hand = p.hand.filter(x => x.id !== t.id);
+        state.forcedDouble = false;
+        state.passCount = 0;
+        if (!p.hand.length) { finish(state.turn, 'habis'); return; }
+        state.turn = 1 - state.turn;
+        return renderAndBroadcast();
+    }
+}
+
+function renderAndBroadcast() {
+    render();
+    if (role === 'host') send({ type:'state', state });
+}
+
+/* =========================================================
+SELESAI RONDE
+========================================================= */
+function finish(w, reason) {
+    if (!state || state.roundResult) return;
+    const remaining = state.players.map(p =>
+        (p.hand||[]).reduce((s,t)=>s+t.a+t.b, 0));
+
+    let winner = w;
+    if (remaining[0] !== 0 || remaining[1] !== 0) {
+        winner = remaining[0] === remaining[1]
+            ? tieWinner(0,1)
+            : (remaining[0] < remaining[1] ? 0 : 1);
+    }
+    const loser = 1 - winner;
+    const points = remaining[loser];
+    const target = state.targetScore || 100;
+
+    state.players[winner].score = (state.players[winner].score||0) + points;
+    state.players[winner].rounds = (state.players[winner].rounds||0) + 1;
+    state.players[winner].lastRoundScore = points;
+    state.players[loser].lastRoundScore = 0;
+    state.starter = winner;
+
+    state.roundResult = {
+        round: state.round,
+        winner, loser, points,
+        gap: (reason === 'gap'),
+        target,
+        matchOver: state.players[winner].score >= target
+    };
+    render();
+    send({ type:'state', state });
+}
+
+function tieWinner(a, b) {
+    const key = i => state.players[i].hand
+        .map(t => ({ s:t.a+t.b, l:Math.min(t.a,t.b) }))
+        .sort((x,y)=> x.s-y.s || x.l-y.l)[0] || { s:0, l:0 };
+    const x = key(a), y = key(b);
+    return x.s !== y.s ? (x.s < y.s ? a : b) : (x.l <= y.l ? a : b);
+}
+
+/* ---------- MODAL ---------- */
+function showModal(title, body, btnText, step) {
+    document.getElementById('mTitle').textContent = title;
+    document.getElementById('mBody').innerHTML = body;
+    document.getElementById('mBtn').textContent = btnText;
+    modalStep = step;
+    document.getElementById('modal').classList.remove('hidden');
+}
+function hideModal() {
+    document.getElementById('modal').classList.add('hidden');
+    modalStep = null;
+}
+
+function checkRoundResult() {
+    if (!state || !state.roundResult) return;
+    const r = state.roundResult;
+    const key = r.round + '|' + r.winner + '|' + r.points + '|' + (r.gap?'g':'n') + '|' + (r.matchOver?'m':'n');
+    if (shownRoundKey === key) return;
+    shownRoundKey = key;
+
+    if (r.gap) {
+        showModal('GAP!',
+            '<h3 style="margin-top:0">🛑 GAP</h3>' +
+            '<p>Kedua pemain tidak memiliki kartu yang cocok dan kartu cadangan sudah habis.</p>' +
+            '<p>Ronde dihentikan (GAP). Poin akan dihitung dari sisa kartu.</p>',
+            'Lihat Hasil', 'gap');
+    } else {
+        showResultModal();
+    }
+}
+
+function showResultModal() {
+    if (!state || !state.roundResult) return;
+    const r = state.roundResult;
+    const mine = myIndex === r.winner;
+    const P = state.players;
+
+    if (r.matchOver) {
+        showModal('Permainan Selesai',
+            '<h3 style="font-size:26px;margin:6px 0">' +
+                (mine ? '🏆 Anda Memenangkan Permainan!' : '💔 Anda Kalah!!') +
+            '</h3>' +
+            '<p><b>' + P[r.winner].name + '</b> mencapai <b>' + P[r.winner].score +
+            ' poin</b> (target ' + r.target + ' poin).</p>' +
+            '<p>Skor akhir:<br>' +
+            P[0].name + ': <b>' + P[0].score + '</b> poin<br>' +
+            P[1].name + ': <b>' + P[1].score + '</b> poin</p>' +
+            '<p class="muted">Klik <b>Main Kembali</b> untuk memulai permainan baru. ' +
+            'Kedua pemain harus menekan tombol.</p>',
+            'Main Kembali', 'matchover');
+    } else {
+        showModal('Ronde Selesai',
+            '<h3>' + (mine ? '🎉 Anda menang ronde ini!' : '😔 Anda kalah ronde ini.') + '</h3>' +
+            '<p>' + (mine ? 'Anda mendapatkan <b>' + r.points + ' poin</b>.'
+                         : 'Lawan mendapatkan <b>' + r.points + ' poin</b>.') + '</p>' +
+            '<p>Skor sementara:<br>' +
+            P[0].name + ': <b>' + P[0].score + '</b> poin<br>' +
+            P[1].name + ': <b>' + P[1].score + '</b> poin</p>' +
+            '<p>Target kemenangan: <b>' + r.target + ' poin</b>.</p>' +
+            '<p class="muted">Kedua pemain harus menekan tombol untuk lanjut.</p>',
+            'Ronde Berikutnya', 'result');
+    }
+}
+
+function modalAction() {
+    if (modalStep === 'gap') {
+        hideModal();
+        if (state && state.roundResult) showResultModal();
+        return;
+    }
+
+    const r = state && state.roundResult;
+    if (!r) { hideModal(); return; }
+
+    myReady = true;
+    hideModal();
+    send({ type: 'ready' });
+    if (role === 'host') tryNext();
+}
+
+function tryNext() {
+    if (role !== 'host') return;
+    if (!myReady || !oppReady) return;
+    myReady = false; oppReady = false;
+
+    if (state.roundResult && state.roundResult.matchOver) {
+        resetGame();
+    } else {
+        nextRound();
+    }
+}
+
+/* ---------- RONDE BARU (HOST) ---------- */
+function nextRound() {
+    if (!state || role !== 'host' || !state.roundResult) return;
+
+    const deck = shuffle(tiles());
+    state.players[0].hand = deck.slice(0, 7);
+    state.players[1].hand = deck.slice(7, 14);
+    state.chain = []; state.stock = deck.slice(14);
+    state.passCount = 0;
+    state.turn = state.starter;
+    state.forcedDouble = true;
+
+    if (!hasDouble(state.players[state.turn])) {
+        if (hasDouble(state.players[1 - state.turn])) state.turn = 1 - state.turn;
+        else state.forcedDouble = false;
+    }
+
+    state.roundResult = null;
+    state.round = (state.round||1) + 1;
+    nextSeq = 0; lastAcceptedSeq = 0;
+    shownRoundKey = null;
+    myReady = false; oppReady = false; busy = false;
+
+    render();
+    send({ type:'state', state });
+}
+
+/* ---------- RESET PERMAINAN (setelah match over) ---------- */
+function resetGame() {
+    if (role !== 'host' || !state) return;
+
+    const target = state.targetScore || 100;
+    const name0 = state.players[0].name;
+    const name1 = state.players[1].name;
+    const deck = shuffle(tiles());
+
+    state = {
+        players: [
+            { name: name0, hand: deck.slice(0, 7), score: 0, rounds: 0 },
+            { name: name1, hand: deck.slice(7, 14), score: 0, rounds: 0 }
+        ],
+        chain: [], stock: deck.slice(14),
+        turn: 0, starter: 0, round: 1,
+        forcedDouble: false, passCount: 0,
+        targetScore: target, roundResult: null,
+        started: true
+    };
+
+    nextSeq = 0; lastAcceptedSeq = 0;
+    shownRoundKey = null;
+    myReady = false; oppReady = false; busy = false;
+
+    render();
+    send({ type: 'state', state });
+}
+
+/* ---------- RENDER KARTU ---------- */
+function pipHalf(n) {
+    const pos = {1:[5],2:[1,9],3:[1,5,9],4:[1,3,7,9],5:[1,3,5,7,9],6:[1,3,4,6,7,9]};
+    return (pos[n]||[]).map(i => '<span class="pip p'+i+'"></span>').join('');
+}
+
+/* ---------- POSISI MEJA (ular turun) ---------- */
+const T_LONG = 82, T_SHORT = 48, PER_ROW = 7, ROW_STEP = 130;
+
+function chainPosition(i) {
+    const block = Math.floor(i / (PER_ROW + 1));
+    const pos = i % (PER_ROW + 1);
+    const y0 = block * ROW_STEP;
+    const rightward = (block % 2 === 0);
+    if (pos < PER_ROW) {
+        const x = rightward ? pos*T_LONG : (PER_ROW-1-pos)*T_LONG;
+        return { x, y:y0, horizontal:true, flip:!rightward };
+    }
+    const x = rightward ? PER_ROW*T_LONG : 0;
+    return { x, y:y0 + T_SHORT, horizontal:false, flip:false };
+}
+
+function tile(t, click, disabled, horizontal, pos) {
+    const place = pos ? ' style="left:'+pos.x+'px;top:'+pos.y+'px;z-index:'+(horizontal?1:3)+'"' : '';
+    const cls = horizontal ? 'middle ' : '';
+    const flip = (pos && pos.flip) ? 'flip ' : '';
+    return '<div class="tile '+(click?'click ':'')+(disabled?'disabled ':'')+cls+flip+'"'+place+
+        (click && !disabled ? ' onclick="play(\''+t.id+'\')"' : '')+'>'+
+        '<div class="half">'+pipHalf(t.a)+'</div><div class="half">'+pipHalf(t.b)+'</div></div>';
+}
+
+/* ---------- RENDER GAME ---------- */
+function render() {
+    if (!state) return;
+
+    state.players.forEach((p, i) => {
+        const isMe = i === myIndex;
+        const safeName = String(p.name || '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+        document.getElementById('p'+i).innerHTML =
+            '<h3>' + safeName + ' ' + (state.turn===i?'🟡':'') +
+            (isMe ? '<button class="rename-btn" onclick="renameMe()" title="Ubah nama Anda">✏️</button>' : '') +
+            '</h3>' +
+            '<div class="score">' +
+            'Kartu: <b>'+p.hand.length+'</b><br>' +
+            'Cadangan: <b>'+(state.stock?state.stock.length:0)+'</b><br>' +
+            'Menang ronde: <b>'+p.rounds+'</b><br>' +
+            'Poin: <b>'+p.score+'</b></div>';
+    });
+
+    const chainEl = document.getElementById('chain');
+    if (state.chain.length) {
+        chainEl.innerHTML = state.chain.map((t, i) => {
+            const pos = chainPosition(i);
+            return tile(t, false, i!==0 && i!==state.chain.length-1, pos.horizontal, pos);
+        }).join('');
+        const last = state.chain.length - 1;
+        const block = Math.floor(last / (PER_ROW + 1));
+        const pos = last % (PER_ROW + 1);
+        const bottom = pos < PER_ROW ? (block*ROW_STEP + T_SHORT) : ((block+1)*ROW_STEP);
+        chainEl.style.height = Math.max(bottom + 40, 200) + 'px';
+    } else {
+        chainEl.innerHTML = '<span class="muted">Meja kosong</span>';
+        chainEl.style.height = '120px';
+    }
+
+    document.getElementById('left').textContent  = state.chain.length ? state.chain[0].a : '—';
+    document.getElementById('right').textContent = state.chain.length ? state.chain[state.chain.length-1].b : '—';
+
+    const p = state.players[myIndex];
+    if (!p) return;
+    const playable = p.hand.filter(can);
+    const mine = state.turn === myIndex;
+
+    document.getElementById('turn').textContent =
+        mine ? 'Giliran Anda — ' + p.name : 'Giliran ' + state.players[state.turn].name;
+    document.getElementById('status').textContent =
+        mine ? (playable.length ? 'Pilih kartu yang cocok.' : 'Tidak ada yang cocok: pilih kartu untuk dibuang.')
+             : 'Menunggu giliran lawan...';
+
+    if (mine) {
+        document.getElementById('hand').innerHTML = p.hand.map(t =>
+            tile(t, true, !playable.some(x=>x.id===t.id))).join('');
+    } else {
+        document.getElementById('hand').innerHTML = p.hand.map(t => tile(t,false,false)).join('');
+    }
+
+    const oldStock = document.getElementById('stockArea');
+    if (oldStock) oldStock.remove();
+
+    if (mine && !playable.length && !state.roundResult) {
+        const area = document.createElement('div');
+        area.id='stockArea'; area.className='stock';
+        if (state.stock.length) {
+            const visible = Math.min(9, state.stock.length);
+            let cards = '<div class="stock-stack">';
+            for (let i=0;i<visible;i++) cards +=
+                '<button type="button" class="stock-card" style="--i:'+i+'" onclick="drawCard(event)" aria-label="Pilih kartu cadangan"><span class="back-mark">◆</span></button>';
+            cards += '</div><div class="stock-count">'+state.stock.length+' kartu cadangan • pilih satu</div>';
+            area.innerHTML = cards;
+            document.getElementById('action').textContent = 'Tidak ada kartu yang cocok. Pilih satu kartu cadangan.';
+        } else {
+            area.innerHTML = '<span class="muted">Tidak ada kartu cadangan.</span>';
+            document.getElementById('action').textContent = 'Tidak ada yang cocok dan cadangan habis. Tekan Lewat.';
+            const btn = document.createElement('button');
+            btn.className='secondary pass-btn'; btn.textContent='Lewat';
+            btn.onclick = doPass;
+            area.appendChild(btn);
+        }
+        document.getElementById('hand').parentElement.appendChild(area);
+    } else {
+        document.getElementById('action').textContent = mine ? 'Pilih kartu yang cocok.' : 'Menunggu giliran lawan...';
+    }
+
+    document.getElementById('roomLabel').textContent =
+        'Room: ' + code + ' • Target: ' + (state.targetScore || 100) + ' poin • Ronde ' + (state.round||1);
+
+    checkRoundResult();
+}
+
+/* ---------- KELUAR ---------- */
+function leaveRoom() {
+    connected = false; gameStarted = false;
+    try { if (dc) dc.close(); } catch(e){}
+    try { if (peer) peer.destroy(); } catch(e){}
+    location.reload();
+}
+
+console.log('%cGAPLE siap.', 'color:#f4c95d;font-weight:bold;');
+</script></body></html>
